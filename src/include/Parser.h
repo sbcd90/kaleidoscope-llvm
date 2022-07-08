@@ -10,6 +10,18 @@ static int getNextToken() {
 
 static std::map<char, int> binOpPrecedence;
 
+static int getTokPrecedence() {
+    if (!isascii(curTok)) {
+        return -1;
+    }
+
+    auto tokPrec = binOpPrecedence[curTok];
+    if (tokPrec <= 0) {
+        return -1;
+    }
+    return tokPrec;
+}
+
 std::unique_ptr<ast::ExprAST> logError(std::string s) {
     std::cout << "Error: " << s << std::endl;
     return nullptr;
@@ -18,6 +30,109 @@ std::unique_ptr<ast::ExprAST> logError(std::string s) {
 std::unique_ptr<ast::PrototypeAST> logErrorP(std::string s) {
     logError(s);
     return nullptr;
+}
+
+static std::unique_ptr<ast::ExprAST> parseExpression();
+
+static std::unique_ptr<ast::ExprAST> parseNumberExpr() {
+    auto result = std::make_unique<ast::NumberExprAST>(numVal);
+    getNextToken();
+    return std::move(result);
+}
+
+static std::unique_ptr<ast::ExprAST> parseParenExpr() {
+    getNextToken();
+    auto v = parseExpression();
+    if (!v) {
+        return nullptr;
+    }
+
+    if (curTok != ')') {
+        return logError("expected ')'");
+    }
+    getNextToken();
+    return v;
+}
+
+static std::unique_ptr<ast::ExprAST> parseIdentifierExpr() {
+    auto idName = identifierStr;
+    getNextToken();
+
+    if (curTok != '(') {
+        return std::make_unique<ast::VariableExprAST>(idName);
+    }
+
+    getNextToken();
+    std::vector<std::unique_ptr<ast::ExprAST>> args{};
+
+    if (curTok != ')') {
+        while (true) {
+            if (auto arg = parseExpression()) {
+                args.push_back(std::move(arg));
+            } else {
+                return nullptr;
+            }
+
+            if (curTok == ')') {
+                break;
+            }
+            if (curTok != ',') {
+                return logError("Expected ')' or ',' in argument list");
+            }
+            getNextToken();
+        }
+    }
+
+    getNextToken();
+    return std::make_unique<ast::CallexprAST>(idName, std::move(args));
+}
+
+static std::unique_ptr<ast::ExprAST> parsePrimary() {
+    switch (curTok) {
+        default:
+            return logError("unknown token when expecting an expression");
+        case tokIdentifier:
+            return parseIdentifierExpr();
+        case tokNumber:
+            return parseNumberExpr();
+        case '(':
+            return parseParenExpr();
+    }
+}
+
+static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
+                                                   std::unique_ptr<ast::ExprAST> lhs) {
+    while (true) {
+        auto tokPrec = getTokPrecedence();
+
+        if (tokPrec < exprPrec) {
+            return lhs;
+        }
+        auto binOp = curTok;
+        getNextToken();
+
+        auto rhs = parsePrimary();
+        if (!rhs) {
+            return nullptr;
+        }
+
+        auto nextPrec = getTokPrecedence();
+        if (tokPrec < nextPrec) {
+            rhs = parseBinOpRHS(tokPrec+1, std::move(rhs));
+            if (!rhs) {
+                return nullptr;
+            }
+        }
+
+        lhs = std::make_unique<ast::BinaryExprAST>(binOp, std::move(lhs), std::move(rhs));
+    }
+}
+
+static std::unique_ptr<ast::ExprAST> parseExpression() {
+    auto lhs = parsePrimary();
+    if (!lhs) {
+        return nullptr;
+    }
 }
 
 static std::unique_ptr<ast::PrototypeAST> parsePrototype() {
