@@ -9,5 +9,6 @@ int main() {
 
     std::cout << "ready> ";
     getNextToken();
+    mainLoop();
     return 0;
 }

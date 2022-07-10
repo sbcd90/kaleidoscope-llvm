@@ -133,6 +133,7 @@ static std::unique_ptr<ast::ExprAST> parseExpression() {
     if (!lhs) {
         return nullptr;
     }
+    return parseBinOpRHS(0, std::move(lhs));
 }
 
 static std::unique_ptr<ast::PrototypeAST> parsePrototype() {
@@ -166,18 +167,49 @@ static std::unique_ptr<ast::FunctionAST> parseDefinition() {
     if (proto == nullptr) {
         return nullptr;
     }
+
+    if (auto e = parseExpression()) {
+        return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e));
+    }
+    return nullptr;
+}
+
+static std::unique_ptr<ast::FunctionAST> parseTopLevelExpr() {
+    if (auto e = parseExpression()) {
+        auto proto = std::make_unique<ast::PrototypeAST>("__anon_expr",
+                                                         std::vector<std::string>{});
+        return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e));
+    }
+    return nullptr;
+}
+
+static std::unique_ptr<ast::PrototypeAST> parseExtern() {
+    getNextToken();
+    return parsePrototype();
 }
 
 static void handleDefinition() {
-
+    if (parseDefinition()) {
+        std::cout << "Parsed a function definition." << std::endl;
+    } else {
+        getNextToken();
+    }
 }
 
 static void handleExtern() {
-
+    if (parseExtern()) {
+        std::cout << "Parsed an extern" << std::endl;
+    } else {
+        getNextToken();
+    }
 }
 
 static void handleTopLevelExpression() {
-
+    if (parseTopLevelExpr()) {
+        std::cout << "Parsed a top-level expr" << std::endl;
+    } else {
+        getNextToken();
+    }
 }
 
 static void mainLoop() {
