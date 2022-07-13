@@ -19,9 +19,9 @@ static int getTok() {
     }
 
     if (isalpha(lastChar)) {
-        identifierStr = std::to_string(lastChar);
+        identifierStr = lastChar;
         while (isalnum(lastChar = getchar())) {
-            identifierStr += std::to_string(static_cast<char>(lastChar));
+            identifierStr += lastChar;
         }
 
         if (identifierStr == "def") {
@@ -36,7 +36,7 @@ static int getTok() {
     if (isdigit(lastChar) || lastChar == '.') {
         std::string numStr;
         do {
-            numStr += std::to_string(static_cast<char>(lastChar));
+            numStr += lastChar;
             lastChar = getchar();
         } while (isdigit(lastChar) || lastChar == '.');
         numVal = strtod(numStr.c_str(), nullptr);

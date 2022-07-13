@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.19)
 project(kaleidoscope_llvm)
 
 set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_COMPILER /opt/homebrew/opt/llvm/bin/clang++)
-set(MY_CALC_LLVM_CONFIG /opt/homebrew/opt/llvm/bin/llvm-config)
+set(CMAKE_CXX_COMPILER /usr/local//opt/llvm/bin/clang++)
+set(MY_CALC_LLVM_CONFIG /usr/local/opt/llvm/bin/llvm-config)
 
 message(STATUS "detected for llvm-config: ${MY_CALC_LLVM_CONFIG}")
 
