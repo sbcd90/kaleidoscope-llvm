@@ -1,8 +1,8 @@
 #include <utility>
 #include <vector>
 #include <map>
-#include "llvm/IR/Function.h"
 #include "llvm/IR/Value.h"
+#include "llvm/IR/Function.h"
 
 namespace ast {
     static std::map<std::string, llvm::Value*> namedValues;
@@ -13,7 +13,7 @@ namespace ast {
         virtual llvm::Value* codegen() = 0;
     };
 
-    class NumberExprAST: public ExprAST {
+    class  NumberExprAST: public ExprAST {
         double val;
     public:
         NumberExprAST(double val): val(val) {}
@@ -50,7 +50,7 @@ namespace ast {
         llvm::Value* codegen() override;
     };
 
-    class PrototypeAST: public ExprAST {
+    class PrototypeAST {
         std::string name;
         std::vector<std::string> args;
     public:

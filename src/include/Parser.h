@@ -1,6 +1,7 @@
 #include "Ast.h"
 #include "Lexer.h"
 #include <map>
+#include <iostream>
 
 static int curTok = 1;
 
@@ -22,12 +23,12 @@ static int getTokPrecedence() {
     return tokPrec;
 }
 
-std::unique_ptr<ast::ExprAST> logError(std::string s) {
+static std::unique_ptr<ast::ExprAST> logError(std::string s) {
     std::cout << "Error: " << s << std::endl;
     return nullptr;
 }
 
-std::unique_ptr<ast::PrototypeAST> logErrorP(std::string s) {
+static std::unique_ptr<ast::PrototypeAST> logErrorP(std::string s) {
     logError(s);
     return nullptr;
 }
@@ -189,24 +190,38 @@ static std::unique_ptr<ast::PrototypeAST> parseExtern() {
 }
 
 static void handleDefinition() {
-    if (parseDefinition()) {
-        std::cout << "Parsed a function definition." << std::endl;
+    if (auto fnAst = parseDefinition()) {
+        if (auto *fnIR = fnAst->codegen()) {
+            std::cout << "Read function definition:" << std::endl;
+            fnIR->print(llvm::errs());
+            std::cout << std::endl;
+        }
     } else {
         getNextToken();
     }
 }
 
 static void handleExtern() {
-    if (parseExtern()) {
-        std::cout << "Parsed an extern" << std::endl;
+    if (auto protoAst = parseExtern()) {
+        if (auto *fnIR = protoAst->codegen()) {
+            std::cout << "Read extern: " << std::endl;
+            fnIR->print(llvm::errs());
+            std::cout << std::endl;
+        }
     } else {
         getNextToken();
     }
 }
 
 static void handleTopLevelExpression() {
-    if (parseTopLevelExpr()) {
-        std::cout << "Parsed a top-level expr" << std::endl;
+    if (auto fnAst = parseTopLevelExpr()) {
+        if (auto *fnIR = fnAst->codegen()) {
+            std::cout << "Read top-level expression:" << std::endl;
+            fnIR->print(llvm::errs());
+
+            std::cout << std::endl;
+            fnIR->eraseFromParent();
+        }
     } else {
         getNextToken();
     }

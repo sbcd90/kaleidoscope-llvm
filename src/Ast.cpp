@@ -1,10 +1,9 @@
-#include "Ast.h"
-#include "LLVM.h"
 #include "Parser.h"
+#include "LLVM.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Verifier.h"
 
-llvm::Value* logErrorV(const char *str) {
+static llvm::Value* logErrorV(const char *str) {
     logError(str);
     return nullptr;
 }
