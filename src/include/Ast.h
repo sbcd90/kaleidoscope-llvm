@@ -1,9 +1,12 @@
 #include <utility>
 #include <vector>
+#include <map>
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Value.h"
 
 namespace ast {
+    static std::map<std::string, llvm::Value*> namedValues;
+
     class ExprAST {
     public:
         virtual ~ExprAST() = default;
