@@ -1,8 +1,8 @@
 #include <iostream>
 #include "Parser.h"
-#include "LLVM.h"
 
 int main() {
+    auto llvmContext = std::make_shared<LLVMContext>();
     binOpPrecedence['<'] = 10;
     binOpPrecedence['+'] = 20;
     binOpPrecedence['-'] = 20;
@@ -10,10 +10,8 @@ int main() {
 
     std::cout << "ready> ";
     getNextToken();
+    mainLoop(llvmContext);
 
-    initializeModule();
-    mainLoop();
-
-    theModule->print(llvm::errs(), nullptr);
+    llvmContext->getModule()->print(llvm::errs(), nullptr);
     return 0;
 }

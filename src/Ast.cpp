@@ -1,5 +1,4 @@
 #include "Parser.h"
-#include "LLVM.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Verifier.h"
 
@@ -9,7 +8,7 @@ static llvm::Value* logErrorV(const char *str) {
 }
 
 llvm::Value* ast::NumberExprAST::codegen() {
-    return llvm::ConstantFP::get(*theContext, llvm::APFloat{val});
+    return llvm::ConstantFP::get(*llvmContext->getContext(), llvm::APFloat{val});
 }
 
 llvm::Value* ast::VariableExprAST::codegen() {
@@ -30,21 +29,21 @@ llvm::Value* ast::BinaryExprAST::codegen() {
 
     switch (op) {
         case '+':
-            return builder->CreateFAdd(l, r, "addtmp");
+            return llvmContext->getBuilder()->CreateFAdd(l, r, "addtmp");
         case '-':
-            return builder->CreateFSub(l, r, "subtmp");
+            return llvmContext->getBuilder()->CreateFSub(l, r, "subtmp");
         case '*':
-            return builder->CreateFSub(l, r, "multmp");
+            return llvmContext->getBuilder()->CreateFSub(l, r, "multmp");
         case '<':
-            l = builder->CreateFCmpULT(l, r, "cmptmp");
-            return builder->CreateUIToFP(l, llvm::Type::getDoubleTy(*theContext), "booltmp");
+            l = llvmContext->getBuilder()->CreateFCmpULT(l, r, "cmptmp");
+            return llvmContext->getBuilder()->CreateUIToFP(l, llvm::Type::getDoubleTy(*llvmContext->getContext()), "booltmp");
         default:
             return logErrorV("invalid binary operator");
     }
 }
 
 llvm::Value* ast::CallexprAST::codegen() {
-    auto calleeF = theModule->getFunction(callee);
+    auto calleeF = llvmContext->getModule()->getFunction(callee);
     if (!calleeF) {
         return logErrorV("Unknown function referenced");
     }
@@ -63,14 +62,14 @@ llvm::Value* ast::CallexprAST::codegen() {
         }
     }
 
-    return builder->CreateCall(calleeF, argsV, "calltmp");
+    return llvmContext->getBuilder()->CreateCall(calleeF, argsV, "calltmp");
 }
 
 llvm::Function* ast::PrototypeAST::codegen() {
-    std::vector<llvm::Type*> doubles{args.size(), llvm::Type::getDoubleTy(*theContext)};
-    auto ft = llvm::FunctionType::get(llvm::Type::getDoubleTy(*theContext), doubles, false);
+    std::vector<llvm::Type*> doubles{args.size(), llvm::Type::getDoubleTy(*llvmContext->getContext())};
+    auto ft = llvm::FunctionType::get(llvm::Type::getDoubleTy(*llvmContext->getContext()), doubles, false);
 
-    auto f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, theModule.get());
+    auto f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, llvmContext->getModule().get());
 
     auto idx = 0;
     for (auto &arg: f->args()) {
@@ -80,7 +79,7 @@ llvm::Function* ast::PrototypeAST::codegen() {
 }
 
 llvm::Function* ast::FunctionAST::codegen() {
-    auto theFunction = theModule->getFunction(proto->getName());
+    auto *theFunction = llvmContext->getModule()->getFunction(proto->getName());
 
     if (!theFunction) {
         theFunction = proto->codegen();
@@ -90,8 +89,8 @@ llvm::Function* ast::FunctionAST::codegen() {
         return nullptr;
     }
 
-    auto bb = llvm::BasicBlock::Create(*theContext, "entry", theFunction);
-    builder->SetInsertPoint(bb);
+    auto bb = llvm::BasicBlock::Create(*llvmContext->getContext(), "entry", theFunction);
+    llvmContext->getBuilder()->SetInsertPoint(bb);
 
     namedValues.clear();
     for (auto &arg: theFunction->args()) {
@@ -99,7 +98,7 @@ llvm::Function* ast::FunctionAST::codegen() {
     }
 
     if (auto retVal = body->codegen()) {
-        builder->CreateRet(retVal);
+        llvmContext->getBuilder()->CreateRet(retVal);
         llvm::verifyFunction(*theFunction);
         return theFunction;
     }

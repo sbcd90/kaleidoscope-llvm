@@ -3,6 +3,7 @@
 #include <map>
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Function.h"
+#include "LLVM.h"
 
 namespace ast {
     static std::map<std::string, llvm::Value*> namedValues;
@@ -15,16 +16,18 @@ namespace ast {
 
     class  NumberExprAST: public ExprAST {
         double val;
+        std::shared_ptr<LLVMContext> llvmContext;
     public:
-        NumberExprAST(double val): val(val) {}
+        NumberExprAST(double val, std::shared_ptr<LLVMContext> llvmContext): val(val), llvmContext(std::move(llvmContext)) {}
 
         llvm::Value* codegen() override;
     };
 
     class VariableExprAST: public ExprAST {
         std::string name;
+        std::shared_ptr<LLVMContext> llvmContext;
     public:
-        VariableExprAST(std::string name): name(std::move(name)) {}
+        VariableExprAST(std::string name, std::shared_ptr<LLVMContext> llvmContext): name(std::move(name)), llvmContext(std::move(llvmContext)) {}
 
         llvm::Value* codegen() override;
     };
@@ -33,9 +36,10 @@ namespace ast {
         char op;
         std::unique_ptr<ExprAST> lhs;
         std::unique_ptr<ExprAST> rhs;
+        std::shared_ptr<LLVMContext> llvmContext;
     public:
-        BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs):
-            op(op), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
+        BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs, std::shared_ptr<LLVMContext> llvmContext):
+            op(op), lhs(std::move(lhs)), rhs(std::move(rhs)), llvmContext(std::move(llvmContext)) {}
 
         llvm::Value* codegen() override;
     };
@@ -43,9 +47,10 @@ namespace ast {
     class CallexprAST: public ExprAST {
         std::string callee;
         std::vector<std::unique_ptr<ExprAST>> args;
+        std::shared_ptr<LLVMContext> llvmContext;
     public:
-        CallexprAST(std::string callee, std::vector<std::unique_ptr<ExprAST>> args):
-            callee(std::move(callee)), args(std::move(args)) {}
+        CallexprAST(std::string callee, std::vector<std::unique_ptr<ExprAST>> args, std::shared_ptr<LLVMContext> llvmContext):
+            callee(std::move(callee)), args(std::move(args)), llvmContext(std::move(llvmContext)) {}
 
         llvm::Value* codegen() override;
     };
@@ -53,9 +58,10 @@ namespace ast {
     class PrototypeAST {
         std::string name;
         std::vector<std::string> args;
+        std::shared_ptr<LLVMContext> llvmContext;
     public:
-        PrototypeAST(std::string name, std::vector<std::string> args):
-            name(std::move(name)), args(std::move(args)) {}
+        PrototypeAST(std::string name, std::vector<std::string> args, std::shared_ptr<LLVMContext> llvmContext):
+            name(std::move(name)), args(std::move(args)), llvmContext(std::move(llvmContext)) {}
 
         llvm::Function* codegen();
 
@@ -67,9 +73,10 @@ namespace ast {
     class FunctionAST {
         std::unique_ptr<PrototypeAST> proto;
         std::unique_ptr<ExprAST> body;
+        std::shared_ptr<LLVMContext> llvmContext;
     public:
-        FunctionAST(std::unique_ptr<PrototypeAST> proto, std::unique_ptr<ExprAST> body):
-            proto(std::move(proto)), body(std::move(body)) {}
+        FunctionAST(std::unique_ptr<PrototypeAST> proto, std::unique_ptr<ExprAST> body, std::shared_ptr<LLVMContext> llvmContext):
+            proto(std::move(proto)), body(std::move(body)), llvmContext(std::move(llvmContext)) {}
 
         llvm::Function* codegen();
     };

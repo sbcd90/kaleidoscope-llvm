@@ -33,17 +33,17 @@ static std::unique_ptr<ast::PrototypeAST> logErrorP(std::string s) {
     return nullptr;
 }
 
-static std::unique_ptr<ast::ExprAST> parseExpression();
+static std::unique_ptr<ast::ExprAST> parseExpression(const std::shared_ptr<LLVMContext> &llvmContext);
 
-static std::unique_ptr<ast::ExprAST> parseNumberExpr() {
-    auto result = std::make_unique<ast::NumberExprAST>(numVal);
+static std::unique_ptr<ast::ExprAST> parseNumberExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+    auto result = std::make_unique<ast::NumberExprAST>(numVal, llvmContext);
     getNextToken();
     return std::move(result);
 }
 
-static std::unique_ptr<ast::ExprAST> parseParenExpr() {
+static std::unique_ptr<ast::ExprAST> parseParenExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
     getNextToken();
-    auto v = parseExpression();
+    auto v = parseExpression(llvmContext);
     if (!v) {
         return nullptr;
     }
@@ -55,12 +55,12 @@ static std::unique_ptr<ast::ExprAST> parseParenExpr() {
     return v;
 }
 
-static std::unique_ptr<ast::ExprAST> parseIdentifierExpr() {
+static std::unique_ptr<ast::ExprAST> parseIdentifierExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
     auto idName = identifierStr;
     getNextToken();
 
     if (curTok != '(') {
-        return std::make_unique<ast::VariableExprAST>(idName);
+        return std::make_unique<ast::VariableExprAST>(idName, llvmContext);
     }
 
     getNextToken();
@@ -68,7 +68,7 @@ static std::unique_ptr<ast::ExprAST> parseIdentifierExpr() {
 
     if (curTok != ')') {
         while (true) {
-            if (auto arg = parseExpression()) {
+            if (auto arg = parseExpression(llvmContext)) {
                 args.push_back(std::move(arg));
             } else {
                 return nullptr;
@@ -85,24 +85,25 @@ static std::unique_ptr<ast::ExprAST> parseIdentifierExpr() {
     }
 
     getNextToken();
-    return std::make_unique<ast::CallexprAST>(idName, std::move(args));
+    return std::make_unique<ast::CallexprAST>(idName, std::move(args), llvmContext);
 }
 
-static std::unique_ptr<ast::ExprAST> parsePrimary() {
+static std::unique_ptr<ast::ExprAST> parsePrimary(const std::shared_ptr<LLVMContext> &llvmContext) {
     switch (curTok) {
         default:
             return logError("unknown token when expecting an expression");
         case tokIdentifier:
-            return parseIdentifierExpr();
+            return parseIdentifierExpr(llvmContext);
         case tokNumber:
-            return parseNumberExpr();
+            return parseNumberExpr(llvmContext);
         case '(':
-            return parseParenExpr();
+            return parseParenExpr(llvmContext);
     }
 }
 
 static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
-                                                   std::unique_ptr<ast::ExprAST> lhs) {
+                                                   std::unique_ptr<ast::ExprAST> lhs,
+                                                   const std::shared_ptr<LLVMContext> &llvmContext) {
     while (true) {
         auto tokPrec = getTokPrecedence();
 
@@ -112,32 +113,32 @@ static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
         auto binOp = curTok;
         getNextToken();
 
-        auto rhs = parsePrimary();
+        auto rhs = parsePrimary(llvmContext);
         if (!rhs) {
             return nullptr;
         }
 
         auto nextPrec = getTokPrecedence();
         if (tokPrec < nextPrec) {
-            rhs = parseBinOpRHS(tokPrec+1, std::move(rhs));
+            rhs = parseBinOpRHS(tokPrec+1, std::move(rhs), llvmContext);
             if (!rhs) {
                 return nullptr;
             }
         }
 
-        lhs = std::make_unique<ast::BinaryExprAST>(binOp, std::move(lhs), std::move(rhs));
+        lhs = std::make_unique<ast::BinaryExprAST>(binOp, std::move(lhs), std::move(rhs), llvmContext);
     }
 }
 
-static std::unique_ptr<ast::ExprAST> parseExpression() {
-    auto lhs = parsePrimary();
+static std::unique_ptr<ast::ExprAST> parseExpression(const std::shared_ptr<LLVMContext> &llvmContext) {
+    auto lhs = parsePrimary(llvmContext);
     if (!lhs) {
         return nullptr;
     }
-    return parseBinOpRHS(0, std::move(lhs));
+    return parseBinOpRHS(0, std::move(lhs), llvmContext);
 }
 
-static std::unique_ptr<ast::PrototypeAST> parsePrototype() {
+static std::unique_ptr<ast::PrototypeAST> parsePrototype(const std::shared_ptr<LLVMContext> &llvmContext) {
     using namespace std::string_literals;
     if (curTok != tokIdentifier) {
         return logErrorP("Expected function name in prototype"s);
@@ -159,38 +160,38 @@ static std::unique_ptr<ast::PrototypeAST> parsePrototype() {
         logErrorP("Expected ')' in prototype"s);
     }
     getNextToken();
-    return std::make_unique<ast::PrototypeAST>(fnName, std::move(argNames));
+    return std::make_unique<ast::PrototypeAST>(fnName, std::move(argNames), llvmContext);
 }
 
-static std::unique_ptr<ast::FunctionAST> parseDefinition() {
+static std::unique_ptr<ast::FunctionAST> parseDefinition(const std::shared_ptr<LLVMContext> &llvmContext) {
     getNextToken();
-    auto proto = parsePrototype();
+    auto proto = parsePrototype(llvmContext);
     if (proto == nullptr) {
         return nullptr;
     }
 
-    if (auto e = parseExpression()) {
-        return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e));
+    if (auto e = parseExpression(llvmContext)) {
+        return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e), llvmContext);
     }
     return nullptr;
 }
 
-static std::unique_ptr<ast::FunctionAST> parseTopLevelExpr() {
-    if (auto e = parseExpression()) {
+static std::unique_ptr<ast::FunctionAST> parseTopLevelExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+    if (auto e = parseExpression(llvmContext)) {
         auto proto = std::make_unique<ast::PrototypeAST>("__anon_expr",
-                                                         std::vector<std::string>{});
-        return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e));
+                                                         std::vector<std::string>{}, llvmContext);
+        return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e), llvmContext);
     }
     return nullptr;
 }
 
-static std::unique_ptr<ast::PrototypeAST> parseExtern() {
+static std::unique_ptr<ast::PrototypeAST> parseExtern(const std::shared_ptr<LLVMContext> &llvmContext) {
     getNextToken();
-    return parsePrototype();
+    return parsePrototype(llvmContext);
 }
 
-static void handleDefinition() {
-    if (auto fnAst = parseDefinition()) {
+static void handleDefinition(const std::shared_ptr<LLVMContext> &llvmContext) {
+    if (auto fnAst = parseDefinition(llvmContext)) {
         if (auto *fnIR = fnAst->codegen()) {
             std::cout << "Read function definition:" << std::endl;
             fnIR->print(llvm::errs());
@@ -201,8 +202,8 @@ static void handleDefinition() {
     }
 }
 
-static void handleExtern() {
-    if (auto protoAst = parseExtern()) {
+static void handleExtern(const std::shared_ptr<LLVMContext> &llvmContext) {
+    if (auto protoAst = parseExtern(llvmContext)) {
         if (auto *fnIR = protoAst->codegen()) {
             std::cout << "Read extern: " << std::endl;
             fnIR->print(llvm::errs());
@@ -213,8 +214,8 @@ static void handleExtern() {
     }
 }
 
-static void handleTopLevelExpression() {
-    if (auto fnAst = parseTopLevelExpr()) {
+static void handleTopLevelExpression(const std::shared_ptr<LLVMContext> &llvmContext) {
+    if (auto fnAst = parseTopLevelExpr(llvmContext)) {
         if (auto *fnIR = fnAst->codegen()) {
             std::cout << "Read top-level expression:" << std::endl;
             fnIR->print(llvm::errs());
@@ -227,7 +228,7 @@ static void handleTopLevelExpression() {
     }
 }
 
-static void mainLoop() {
+static void mainLoop(const std::shared_ptr<LLVMContext> &llvmContext) {
     while (true) {
         std::cout << "ready> ";
         switch (curTok) {
@@ -237,13 +238,13 @@ static void mainLoop() {
                 getNextToken();
                 break;
             case tokDef:
-                handleDefinition();
+                handleDefinition(llvmContext);
                 break;
             case tokExtern:
-                handleExtern();
+                handleExtern(llvmContext);
                 break;
             default:
-                handleTopLevelExpression();
+                handleTopLevelExpression(llvmContext);
                 break;
         }
     }
