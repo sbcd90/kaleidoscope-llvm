@@ -33,7 +33,7 @@ llvm::Value* ast::BinaryExprAST::codegen() {
         case '-':
             return llvmContext->getBuilder()->CreateFSub(l, r, "subtmp");
         case '*':
-            return llvmContext->getBuilder()->CreateFSub(l, r, "multmp");
+            return llvmContext->getBuilder()->CreateFMul(l, r, "multmp");
         case '<':
             l = llvmContext->getBuilder()->CreateFCmpULT(l, r, "cmptmp");
             return llvmContext->getBuilder()->CreateUIToFP(l, llvm::Type::getDoubleTy(*llvmContext->getContext()), "booltmp");
@@ -100,6 +100,7 @@ llvm::Function* ast::FunctionAST::codegen() {
     if (auto retVal = body->codegen()) {
         llvmContext->getBuilder()->CreateRet(retVal);
         llvm::verifyFunction(*theFunction);
+        llvmContext->getFPM()->run(*theFunction);
         return theFunction;
     }
 
