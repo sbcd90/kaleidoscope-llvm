@@ -20,6 +20,7 @@ public:
         theJit = exitOnError(llvm::orc::KaleidoscopeJIT::Create());
         theContext = std::make_unique<llvm::LLVMContext>();
         theModule = std::make_unique<llvm::Module>("my cool jit", *theContext);
+        theModule->setDataLayout(theJit->getDataLayout());
 
         builder = std::make_unique<llvm::IRBuilder<>>(*theContext);
         initializePassManager();

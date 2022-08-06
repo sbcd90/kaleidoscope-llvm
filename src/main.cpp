@@ -1,7 +1,12 @@
 #include <iostream>
+#include "llvm/Support/TargetSelect.h"
 #include "Parser.h"
 
 int main() {
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    llvm::InitializeNativeTargetAsmParser();
+
     auto llvmContext = std::make_shared<LLVMContext>();
     binOpPrecedence['<'] = 10;
     binOpPrecedence['+'] = 20;
