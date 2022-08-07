@@ -69,6 +69,20 @@ namespace ast {
             return this->name;
         }
     };
+    static std::map<std::string, std::unique_ptr<PrototypeAST>> functionProtos;
+
+    static llvm::Function* getFunction(const std::shared_ptr<LLVMContext> &llvmContext, std::string name) {
+        if (auto *f = llvmContext->getModule()->getFunction(name)) {
+            return f;
+        }
+
+        auto fi = functionProtos.find(name);
+        if (fi != functionProtos.end()) {
+            return fi->second->codegen();
+        }
+
+        return nullptr;
+    }
 
     class FunctionAST {
         std::unique_ptr<PrototypeAST> proto;

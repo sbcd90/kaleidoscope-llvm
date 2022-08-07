@@ -43,7 +43,7 @@ llvm::Value* ast::BinaryExprAST::codegen() {
 }
 
 llvm::Value* ast::CallexprAST::codegen() {
-    auto calleeF = llvmContext->getModule()->getFunction(callee);
+    auto calleeF = ast::getFunction(llvmContext, callee);
     if (!calleeF) {
         return logErrorV("Unknown function referenced");
     }
@@ -79,11 +79,9 @@ llvm::Function* ast::PrototypeAST::codegen() {
 }
 
 llvm::Function* ast::FunctionAST::codegen() {
-    auto *theFunction = llvmContext->getModule()->getFunction(proto->getName());
-
-    if (!theFunction) {
-        theFunction = proto->codegen();
-    }
+    auto &p = *proto;
+    functionProtos[proto->getName()] = std::move(proto);
+    auto *theFunction = ast::getFunction(llvmContext, p.getName());
 
     if (!theFunction) {
         return nullptr;

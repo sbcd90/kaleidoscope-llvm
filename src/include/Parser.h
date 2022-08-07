@@ -193,9 +193,10 @@ static std::unique_ptr<ast::PrototypeAST> parseExtern(const std::shared_ptr<LLVM
 static void handleDefinition(const std::shared_ptr<LLVMContext> &llvmContext) {
     if (auto fnAst = parseDefinition(llvmContext)) {
         if (auto *fnIR = fnAst->codegen()) {
-            std::cout << "Read function definition:" << std::endl;
+/*            std::cout << "Read function definition:" << std::endl;
             fnIR->print(llvm::errs());
-            std::cout << std::endl;
+            std::cout << std::endl;*/
+            llvmContext->handleDefinition();
         }
     } else {
         getNextToken();
@@ -205,9 +206,10 @@ static void handleDefinition(const std::shared_ptr<LLVMContext> &llvmContext) {
 static void handleExtern(const std::shared_ptr<LLVMContext> &llvmContext) {
     if (auto protoAst = parseExtern(llvmContext)) {
         if (auto *fnIR = protoAst->codegen()) {
-            std::cout << "Read extern: " << std::endl;
+/*            std::cout << "Read extern: " << std::endl;
             fnIR->print(llvm::errs());
-            std::cout << std::endl;
+            std::cout << std::endl;*/
+            ast::functionProtos[protoAst->getName()] = std::move(protoAst);
         }
     } else {
         getNextToken();
@@ -217,11 +219,13 @@ static void handleExtern(const std::shared_ptr<LLVMContext> &llvmContext) {
 static void handleTopLevelExpression(const std::shared_ptr<LLVMContext> &llvmContext) {
     if (auto fnAst = parseTopLevelExpr(llvmContext)) {
         if (auto *fnIR = fnAst->codegen()) {
-            std::cout << "Read top-level expression:" << std::endl;
+/*            std::cout << "Read top-level expression:" << std::endl;
             fnIR->print(llvm::errs());
 
-            std::cout << std::endl;
-            fnIR->eraseFromParent();
+            std::cout << std::endl;*/
+
+            llvmContext->handleTopLevelExprJit();
+//            fnIR->eraseFromParent();
         }
     } else {
         getNextToken();

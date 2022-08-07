@@ -6,6 +6,7 @@
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
 #include <memory>
+#include <iostream>
 #include "../include/KaleidoscopeJIT.h"
 
 class LLVMContext {
@@ -18,12 +19,7 @@ class LLVMContext {
 public:
     LLVMContext() {
         theJit = exitOnError(llvm::orc::KaleidoscopeJIT::Create());
-        theContext = std::make_unique<llvm::LLVMContext>();
-        theModule = std::make_unique<llvm::Module>("my cool jit", *theContext);
-        theModule->setDataLayout(theJit->getDataLayout());
-
-        builder = std::make_unique<llvm::IRBuilder<>>(*theContext);
-        initializePassManager();
+        initializeModuleAndPassManager();
     }
 
     inline const std::unique_ptr<llvm::LLVMContext>& getContext() const {
@@ -42,7 +38,17 @@ public:
         return theFPM;
     }
 
-    void initializePassManager() {
+    inline const std::unique_ptr<llvm::orc::KaleidoscopeJIT>& getJit() const {
+        return theJit;
+    }
+
+    void initializeModuleAndPassManager() {
+        theContext = std::make_unique<llvm::LLVMContext>();
+        theModule = std::make_unique<llvm::Module>("my cool jit", *theContext);
+        theModule->setDataLayout(theJit->getDataLayout());
+
+        builder = std::make_unique<llvm::IRBuilder<>>(*theContext);
+
         theFPM = std::make_unique<llvm::legacy::FunctionPassManager>(theModule.get());
 
         theFPM->add(llvm::createInstructionCombiningPass());
@@ -51,5 +57,26 @@ public:
         theFPM->add(llvm::createCFGSimplificationPass());
 
         theFPM->doInitialization();
+    }
+
+    void handleTopLevelExprJit() {
+        auto rt = theJit->getMainJITDylib().createResourceTracker();
+        auto tsm = llvm::orc::ThreadSafeModule{std::move(theModule), std::move(theContext)};
+        exitOnError(theJit->addModule(std::move(tsm), rt));
+
+        initializeModuleAndPassManager();
+
+        auto exprSymbol = exitOnError(theJit->lookup("__anon_expr"));
+
+        double (*fp)() = (double (*)())(intptr_t)exprSymbol.getAddress();
+        std::cout << "Evaluated to " << fp() << std::endl;
+
+        exitOnError(rt->remove());
+    }
+
+    void handleDefinition() {
+        auto tsm = llvm::orc::ThreadSafeModule{std::move(theModule), std::move(theContext)};
+        exitOnError(theJit->addModule(std::move(tsm)));
+        initializeModuleAndPassManager();
     }
 };
