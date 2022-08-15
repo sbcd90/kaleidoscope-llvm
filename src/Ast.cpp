@@ -65,6 +65,53 @@ llvm::Value* ast::CallexprAST::codegen() {
     return llvmContext->getBuilder()->CreateCall(calleeF, argsV, "calltmp");
 }
 
+llvm::Value* ast::IfExprAST::codegen() {
+    auto condV = cond->codegen();
+    if (!condV) {
+        return nullptr;
+    }
+
+    condV = llvmContext->getBuilder()->CreateFCmpONE(condV, llvm::ConstantFP::get(*(llvmContext->getContext()), llvm::APFloat(0.0)), "ifcond");
+
+    auto theFunction = llvmContext->getBuilder()->GetInsertBlock()->getParent();
+
+    auto thenBB = llvm::BasicBlock::Create(*(llvmContext->getContext()), "then", theFunction);
+    auto elseBB = llvm::BasicBlock::Create(*(llvmContext->getContext()), "else");
+    auto mergeBB = llvm::BasicBlock::Create(*(llvmContext->getContext()), "ifcont");
+
+    llvmContext->getBuilder()->CreateCondBr(condV, thenBB, elseBB);
+
+    llvmContext->getBuilder()->SetInsertPoint(thenBB);
+
+    auto thenV = then->codegen();
+    if (!thenV) {
+        return nullptr;
+    }
+
+    llvmContext->getBuilder()->CreateBr(mergeBB);
+    thenBB = llvmContext->getBuilder()->GetInsertBlock();
+
+    theFunction->getBasicBlockList().push_back(elseBB);
+    llvmContext->getBuilder()->SetInsertPoint(elseBB);
+
+    auto elseV = else_->codegen();
+    if (!elseV) {
+        return nullptr;
+    }
+
+    llvmContext->getBuilder()->CreateBr(mergeBB);
+    elseBB = llvmContext->getBuilder()->GetInsertBlock();
+
+    theFunction->getBasicBlockList().push_back(mergeBB);
+    llvmContext->getBuilder()->SetInsertPoint(mergeBB);
+
+    auto pn = llvmContext->getBuilder()->CreatePHI(llvm::Type::getDoubleTy(*(llvmContext->getContext())), 2, "iftmp");
+
+    pn->addIncoming(thenV, thenBB);
+    pn->addIncoming(elseV, elseBB);
+    return pn;
+}
+
 llvm::Function* ast::PrototypeAST::codegen() {
     std::vector<llvm::Type*> doubles{args.size(), llvm::Type::getDoubleTy(*llvmContext->getContext())};
     auto ft = llvm::FunctionType::get(llvm::Type::getDoubleTy(*llvmContext->getContext()), doubles, false);

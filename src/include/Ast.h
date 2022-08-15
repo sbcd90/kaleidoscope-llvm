@@ -55,6 +55,16 @@ namespace ast {
         llvm::Value* codegen() override;
     };
 
+    class IfExprAST: public ExprAST {
+        std::unique_ptr<ExprAST> cond, then, else_;
+        std::shared_ptr<LLVMContext> llvmContext;
+    public:
+        IfExprAST(std::unique_ptr<ExprAST> cond, std::unique_ptr<ExprAST> then, std::unique_ptr<ExprAST> else_, std::shared_ptr<LLVMContext> llvmContext):
+        cond(std::move(cond)), then(std::move(then)), else_(std::move(else_)), llvmContext(std::move(llvmContext)) {}
+
+        llvm::Value* codegen() override;
+    };
+
     class PrototypeAST {
         std::string name;
         std::vector<std::string> args;

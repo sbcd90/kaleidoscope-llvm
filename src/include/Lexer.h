@@ -5,7 +5,11 @@ enum Token {
     tokExtern = -3,
 
     tokIdentifier = -4,
-    tokNumber = 5
+    tokNumber = 5,
+
+    tokIf = -6,
+    tokThen = -7,
+    tokElse = -8
 };
 
 static std::string identifierStr;
@@ -29,6 +33,15 @@ static int getTok() {
         }
         if (identifierStr == "extern") {
             return tokExtern;
+        }
+        if (identifierStr == "if") {
+            return tokIf;
+        }
+        if (identifierStr == "then") {
+            return tokThen;
+        }
+        if (identifierStr == "else") {
+            return tokElse;
         }
         return tokIdentifier;
     }

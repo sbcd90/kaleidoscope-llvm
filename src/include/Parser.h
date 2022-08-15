@@ -88,6 +88,38 @@ static std::unique_ptr<ast::ExprAST> parseIdentifierExpr(const std::shared_ptr<L
     return std::make_unique<ast::CallexprAST>(idName, std::move(args), llvmContext);
 }
 
+static std::unique_ptr<ast::ExprAST> parseIfExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+    getNextToken();
+
+    auto cond = parseExpression(llvmContext);
+    if (!cond) {
+        return nullptr;
+    }
+
+    if (curTok != tokThen) {
+        return logError("expected then");
+    }
+    getNextToken();
+
+    auto then = parseExpression(llvmContext);
+    if (!then) {
+        return nullptr;
+    }
+
+    if (curTok != tokElse) {
+        return logError("expected else");
+    }
+
+    getNextToken();
+
+    auto else_ = parseExpression(llvmContext);
+    if (!else_) {
+        return nullptr;
+    }
+
+    return std::make_unique<ast::IfExprAST>(std::move(cond), std::move(then), std::move(else_), llvmContext);
+}
+
 static std::unique_ptr<ast::ExprAST> parsePrimary(const std::shared_ptr<LLVMContext> &llvmContext) {
     switch (curTok) {
         default:
@@ -98,6 +130,8 @@ static std::unique_ptr<ast::ExprAST> parsePrimary(const std::shared_ptr<LLVMCont
             return parseNumberExpr(llvmContext);
         case '(':
             return parseParenExpr(llvmContext);
+        case tokIf:
+            return parseIfExpr(llvmContext);
     }
 }
 
