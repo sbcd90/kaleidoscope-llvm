@@ -120,6 +120,58 @@ static std::unique_ptr<ast::ExprAST> parseIfExpr(const std::shared_ptr<LLVMConte
     return std::make_unique<ast::IfExprAST>(std::move(cond), std::move(then), std::move(else_), llvmContext);
 }
 
+static std::unique_ptr<ast::ExprAST> parseForExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+    getNextToken();
+
+    if (curTok != tokIdentifier) {
+        return logError("expected identifier after for");
+    }
+
+    auto idName = identifierStr;
+    getNextToken();
+
+    if (curTok != '=') {
+        return logError("expected '=' after for");
+    }
+    getNextToken();
+
+    auto start = parseExpression(llvmContext);
+    if (!start) {
+        return nullptr;
+    }
+    if (curTok != ',') {
+        return logError("expected ',' after for start value");
+    }
+    getNextToken();
+
+    auto end = parseExpression(llvmContext);
+    if (!end) {
+        return nullptr;
+    }
+
+    std::unique_ptr<ast::ExprAST> step;
+    if (curTok == ',') {
+        getNextToken();
+        step = parseExpression(llvmContext);
+
+        if (!step) {
+            return nullptr;
+        }
+    }
+
+    if (curTok != tokIn) {
+        return logError("expected 'in' after for");
+    }
+    getNextToken();
+
+    auto body = parseExpression(llvmContext);
+    if (!body) {
+        return nullptr;
+    }
+
+    return std::make_unique<ast::ForExprAST>(idName, std::move(start), std::move(end), std::move(step), std::move(body), llvmContext);
+}
+
 static std::unique_ptr<ast::ExprAST> parsePrimary(const std::shared_ptr<LLVMContext> &llvmContext) {
     switch (curTok) {
         default:
@@ -132,6 +184,8 @@ static std::unique_ptr<ast::ExprAST> parsePrimary(const std::shared_ptr<LLVMCont
             return parseParenExpr(llvmContext);
         case tokIf:
             return parseIfExpr(llvmContext);
+        case tokFor:
+            return parseForExpr(llvmContext);
     }
 }
 

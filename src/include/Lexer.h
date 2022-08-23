@@ -9,7 +9,10 @@ enum Token {
 
     tokIf = -6,
     tokThen = -7,
-    tokElse = -8
+    tokElse = -8,
+
+    tokFor = -9,
+    tokIn = -10
 };
 
 static std::string identifierStr;
@@ -42,6 +45,12 @@ static int getTok() {
         }
         if (identifierStr == "else") {
             return tokElse;
+        }
+        if (identifierStr == "for") {
+            return tokFor;
+        }
+        if (identifierStr == "in") {
+            return tokIn;
         }
         return tokIdentifier;
     }

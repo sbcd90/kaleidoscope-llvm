@@ -65,6 +65,19 @@ namespace ast {
         llvm::Value* codegen() override;
     };
 
+    class ForExprAST: public ExprAST {
+        std::string varName;
+        std::unique_ptr<ExprAST> start, end, step, body;
+        std::shared_ptr<LLVMContext> llvmContext;
+    public:
+        ForExprAST(std::string varName, std::unique_ptr<ExprAST> start,
+                   std::unique_ptr<ExprAST> end, std::unique_ptr<ExprAST> step,
+                   std::unique_ptr<ExprAST> body, std::shared_ptr<LLVMContext> llvmContext): varName(std::move(varName)), start(std::move(start)),
+                   end(std::move(end)), step(std::move(step)), body(std::move(body)), llvmContext(std::move(llvmContext)) {}
+
+        llvm::Value* codegen() override;
+    };
+
     class PrototypeAST {
         std::string name;
         std::vector<std::string> args;

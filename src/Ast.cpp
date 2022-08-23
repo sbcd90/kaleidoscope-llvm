@@ -112,6 +112,65 @@ llvm::Value* ast::IfExprAST::codegen() {
     return pn;
 }
 
+llvm::Value* ast::ForExprAST::codegen() {
+    auto startVal = start->codegen();
+    if (!startVal) {
+        return nullptr;
+    }
+
+    auto theFunction = llvmContext->getBuilder()->GetInsertBlock()->getParent();
+    auto preHeaderBB = llvmContext->getBuilder()->GetInsertBlock();
+    auto loopBB = llvm::BasicBlock::Create(*(llvmContext->getContext()), "loop", theFunction);
+
+    llvmContext->getBuilder()->CreateBr(loopBB);
+    llvmContext->getBuilder()->SetInsertPoint(loopBB);
+
+    auto variable = llvmContext->getBuilder()->CreatePHI(llvm::Type::getDoubleTy(*(llvmContext->getContext())), 2, varName);
+    variable->addIncoming(startVal, preHeaderBB);
+
+    auto oldVal = ast::namedValues[varName];
+    ast::namedValues[varName] = variable;
+
+    if (!body->codegen()) {
+        return nullptr;
+    }
+
+    llvm::Value *stepVal;
+    if (step) {
+        stepVal = step->codegen();
+        if (!stepVal) {
+            return nullptr;
+        }
+    } else {
+        stepVal = llvm::ConstantFP::get(*(llvmContext->getContext()), llvm::APFloat(1.0));
+    }
+
+    auto nextVar = llvmContext->getBuilder()->CreateFAdd(variable, stepVal, "nextvar");
+
+    auto endCond = end->codegen();
+    if (!endCond) {
+        return nullptr;
+    }
+
+    endCond = llvmContext->getBuilder()->CreateFCmpONE(endCond, llvm::ConstantFP::get(*(llvmContext->getContext()), llvm::APFloat(0.0)), "loopcond");
+
+    auto loopEndBB = llvmContext->getBuilder()->GetInsertBlock();
+    auto afterBB = llvm::BasicBlock::Create(*(llvmContext->getContext()), "afterloop", theFunction);
+
+    llvmContext->getBuilder()->CreateCondBr(endCond, loopBB, afterBB);
+    llvmContext->getBuilder()->SetInsertPoint(afterBB);
+
+    variable->addIncoming(nextVar, loopEndBB);
+
+    if (oldVal) {
+        namedValues[varName] = oldVal;
+    } else {
+        namedValues.erase(varName);
+    }
+
+    return llvm::Constant::getNullValue(llvm::Type::getDoubleTy(*(llvmContext->getContext())));
+}
+
 llvm::Function* ast::PrototypeAST::codegen() {
     std::vector<llvm::Type*> doubles{args.size(), llvm::Type::getDoubleTy(*llvmContext->getContext())};
     auto ft = llvm::FunctionType::get(llvm::Type::getDoubleTy(*llvmContext->getContext()), doubles, false);
