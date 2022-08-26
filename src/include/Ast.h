@@ -78,18 +78,49 @@ namespace ast {
         llvm::Value* codegen() override;
     };
 
+    class WhileExprAST: public ExprAST {
+        std::unique_ptr<ExprAST> end, body;
+        std::shared_ptr<LLVMContext> llvmContext;
+    public:
+        WhileExprAST(std::unique_ptr<ExprAST> end, std::unique_ptr<ExprAST> body, std::shared_ptr<LLVMContext> llvmContext):
+            end(std::move(end)), body(std::move(body)), llvmContext(std::move(llvmContext)) {}
+
+        llvm::Value* codegen() override;
+    };
+
     class PrototypeAST {
         std::string name;
         std::vector<std::string> args;
+        bool isOperator;
+        unsigned precedence;
         std::shared_ptr<LLVMContext> llvmContext;
     public:
-        PrototypeAST(std::string name, std::vector<std::string> args, std::shared_ptr<LLVMContext> llvmContext):
-            name(std::move(name)), args(std::move(args)), llvmContext(std::move(llvmContext)) {}
+        PrototypeAST(std::string name, std::vector<std::string> args, std::shared_ptr<LLVMContext> llvmContext,
+                     bool isOperator = false, unsigned prec = 0):
+            name(std::move(name)), args(std::move(args)), llvmContext(std::move(llvmContext)),
+            isOperator(isOperator), precedence(prec) {}
 
         llvm::Function* codegen();
 
         const std::string& getName() const {
             return this->name;
+        }
+
+        bool isUnaryOp() const {
+            return isOperator && args.size() == 1;
+        }
+
+        bool isBinaryOp() const {
+            return isOperator && args.size() == 2;
+        }
+
+        char getOperatorName() const {
+            assert(isUnaryOp() || isBinaryOp());
+            return name[name.length() - 1];
+        }
+
+        unsigned getBinaryPrecedence() const {
+            return precedence;
         }
     };
     static std::map<std::string, std::unique_ptr<PrototypeAST>> functionProtos;

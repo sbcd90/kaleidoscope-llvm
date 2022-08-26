@@ -9,14 +9,15 @@ static int getNextToken() {
     return curTok = getTok();
 }
 
-static std::map<char, int> binOpPrecedence;
-
-static int getTokPrecedence() {
+static int getTokPrecedence(const std::shared_ptr<LLVMContext> &llvmContext) {
     if (!isascii(curTok)) {
         return -1;
     }
 
-    auto tokPrec = binOpPrecedence[curTok];
+    if (llvmContext->getBinOpPrecedence().find(curTok) == llvmContext->getBinOpPrecedence().end()) {
+        return -1;
+    }
+    auto tokPrec = llvmContext->getBinOpPrecedence().at(curTok);
     if (tokPrec <= 0) {
         return -1;
     }
@@ -193,7 +194,7 @@ static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
                                                    std::unique_ptr<ast::ExprAST> lhs,
                                                    const std::shared_ptr<LLVMContext> &llvmContext) {
     while (true) {
-        auto tokPrec = getTokPrecedence();
+        auto tokPrec = getTokPrecedence(llvmContext);
 
         if (tokPrec < exprPrec) {
             return lhs;
@@ -206,7 +207,7 @@ static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
             return nullptr;
         }
 
-        auto nextPrec = getTokPrecedence();
+        auto nextPrec = getTokPrecedence(llvmContext);
         if (tokPrec < nextPrec) {
             rhs = parseBinOpRHS(tokPrec+1, std::move(rhs), llvmContext);
             if (!rhs) {
@@ -228,12 +229,36 @@ static std::unique_ptr<ast::ExprAST> parseExpression(const std::shared_ptr<LLVMC
 
 static std::unique_ptr<ast::PrototypeAST> parsePrototype(const std::shared_ptr<LLVMContext> &llvmContext) {
     using namespace std::string_literals;
-    if (curTok != tokIdentifier) {
-        return logErrorP("Expected function name in prototype"s);
-    }
+    std::string fnName;
 
-    auto fnName = identifierStr;
-    getNextToken();
+    unsigned kind = 0;
+    unsigned binaryPrecedence = 30;
+
+    switch (curTok) {
+        case tokIdentifier:
+            fnName = identifierStr;
+            kind = 0;
+            getNextToken();
+            break;
+        case tokBinary:
+            getNextToken();
+            if (!isascii(curTok)) {
+                return logErrorP("Expected binary operator"s);
+            }
+            fnName = "binary";
+            fnName += (char) curTok;
+            kind = 2;
+
+            getNextToken();
+            if (curTok == tokNumber) {
+                if (numVal < 1 || numVal > 100) {
+                    return logErrorP("Invalid precedence: must be 1..100"s);
+                }
+                binaryPrecedence = (unsigned) numVal;
+                getNextToken();
+            }
+            break;
+    }
 
     if (curTok != '(') {
         logErrorP("Expected '(' in prototype"s);
@@ -248,7 +273,11 @@ static std::unique_ptr<ast::PrototypeAST> parsePrototype(const std::shared_ptr<L
         logErrorP("Expected ')' in prototype"s);
     }
     getNextToken();
-    return std::make_unique<ast::PrototypeAST>(fnName, std::move(argNames), llvmContext);
+
+    if (kind && argNames.size() != kind) {
+        return logErrorP("Invalid number of operands for operator"s);
+    }
+    return std::make_unique<ast::PrototypeAST>(fnName, std::move(argNames), llvmContext, kind != 0, binaryPrecedence);
 }
 
 static std::unique_ptr<ast::FunctionAST> parseDefinition(const std::shared_ptr<LLVMContext> &llvmContext) {

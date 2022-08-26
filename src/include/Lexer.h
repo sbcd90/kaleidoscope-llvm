@@ -12,7 +12,12 @@ enum Token {
     tokElse = -8,
 
     tokFor = -9,
-    tokIn = -10
+    tokIn = -10,
+
+    tokBinary = -11,
+    tokUnary = -12,
+
+    tokWhile = -14
 };
 
 static std::string identifierStr;
@@ -51,6 +56,15 @@ static int getTok() {
         }
         if (identifierStr == "in") {
             return tokIn;
+        }
+        if (identifierStr == "binary") {
+            return tokBinary;
+        }
+        if (identifierStr == "unary") {
+            return tokUnary;
+        }
+        if (identifierStr == "while") {
+            return tokWhile;
         }
         return tokIdentifier;
     }

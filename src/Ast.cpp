@@ -38,8 +38,15 @@ llvm::Value* ast::BinaryExprAST::codegen() {
             l = llvmContext->getBuilder()->CreateFCmpULT(l, r, "cmptmp");
             return llvmContext->getBuilder()->CreateUIToFP(l, llvm::Type::getDoubleTy(*llvmContext->getContext()), "booltmp");
         default:
-            return logErrorV("invalid binary operator");
+            break;
     }
+
+    using namespace std::string_literals;
+    auto f = getFunction(llvmContext, "binary"s + op);
+    assert(f && "binary operator not found!");
+
+    llvm::Value *ops[2] = {l, r};
+    return llvmContext->getBuilder()->CreateCall(f, ops, "binop");
 }
 
 llvm::Value* ast::CallexprAST::codegen() {
@@ -191,6 +198,10 @@ llvm::Function* ast::FunctionAST::codegen() {
 
     if (!theFunction) {
         return nullptr;
+    }
+
+    if (p.isBinaryOp()) {
+        llvmContext->addToBinOpPrecedence(std::make_pair(p.getOperatorName(), p.getBinaryPrecedence()));
     }
 
     auto bb = llvm::BasicBlock::Create(*llvmContext->getContext(), "entry", theFunction);

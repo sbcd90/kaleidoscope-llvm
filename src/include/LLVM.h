@@ -15,9 +15,15 @@ class LLVMContext {
     std::unique_ptr<llvm::IRBuilder<>> builder;
     std::unique_ptr<llvm::legacy::FunctionPassManager> theFPM;
     std::unique_ptr<llvm::orc::KaleidoscopeJIT> theJit;
+    std::map<char, int> binOpPrecedence;
     llvm::ExitOnError exitOnError;
 public:
     LLVMContext() {
+        binOpPrecedence = std::map<char, int>{};
+        binOpPrecedence['<'] = 10;
+        binOpPrecedence['+'] = 20;
+        binOpPrecedence['-'] = 20;
+        binOpPrecedence['*'] = 40;
         theJit = exitOnError(llvm::orc::KaleidoscopeJIT::Create());
         initializeModuleAndPassManager();
     }
@@ -40,6 +46,14 @@ public:
 
     inline const std::unique_ptr<llvm::orc::KaleidoscopeJIT>& getJit() const {
         return theJit;
+    }
+
+    inline const std::map<char, int>& getBinOpPrecedence() const {
+        return binOpPrecedence;
+    }
+
+    void addToBinOpPrecedence(std::pair<char, int> binOp) {
+        binOpPrecedence[binOp.first] = binOp.second;
     }
 
     void initializeModuleAndPassManager() {
