@@ -190,6 +190,19 @@ static std::unique_ptr<ast::ExprAST> parsePrimary(const std::shared_ptr<LLVMCont
     }
 }
 
+static std::unique_ptr<ast::ExprAST> parseUnary(const std::shared_ptr<LLVMContext> &llvmContext) {
+    if (!isascii(curTok) || curTok == '(' || curTok == ',') {
+        return parsePrimary(llvmContext);
+    }
+
+    auto opC = curTok;
+    getNextToken();
+    if (auto operand = parseUnary(llvmContext)) {
+        return std::make_unique<ast::UnaryExprAST>(opC, std::move(operand), llvmContext);
+    }
+    return nullptr;
+}
+
 static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
                                                    std::unique_ptr<ast::ExprAST> lhs,
                                                    const std::shared_ptr<LLVMContext> &llvmContext) {
@@ -202,7 +215,7 @@ static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
         auto binOp = curTok;
         getNextToken();
 
-        auto rhs = parsePrimary(llvmContext);
+        auto rhs = parseUnary(llvmContext);
         if (!rhs) {
             return nullptr;
         }
@@ -220,7 +233,7 @@ static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
 }
 
 static std::unique_ptr<ast::ExprAST> parseExpression(const std::shared_ptr<LLVMContext> &llvmContext) {
-    auto lhs = parsePrimary(llvmContext);
+    auto lhs = parseUnary(llvmContext);
     if (!lhs) {
         return nullptr;
     }
@@ -238,6 +251,16 @@ static std::unique_ptr<ast::PrototypeAST> parsePrototype(const std::shared_ptr<L
         case tokIdentifier:
             fnName = identifierStr;
             kind = 0;
+            getNextToken();
+            break;
+        case tokUnary:
+            getNextToken();
+            if (!isascii(curTok)) {
+                return logErrorP("Expected unary operator"s);
+            }
+            fnName = "unary";
+            fnName += (char) curTok;
+            kind = 1;
             getNextToken();
             break;
         case tokBinary:

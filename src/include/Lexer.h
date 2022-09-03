@@ -5,7 +5,7 @@ enum Token {
     tokExtern = -3,
 
     tokIdentifier = -4,
-    tokNumber = 5,
+    tokNumber = -5,
 
     tokIf = -6,
     tokThen = -7,

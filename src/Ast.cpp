@@ -19,6 +19,19 @@ llvm::Value* ast::VariableExprAST::codegen() {
     return v;
 }
 
+llvm::Value* ast::UnaryExprAST::codegen() {
+    auto operandV = operand->codegen();
+    if (!operandV) {
+        return nullptr;
+    }
+
+    auto f = getFunction(llvmContext, std::string{"unary"} + op);
+    if (!f) {
+        return logErrorV("Unknown unary operator");
+    }
+    return llvmContext->getBuilder()->CreateCall(f, operandV, "unop");
+}
+
 llvm::Value* ast::BinaryExprAST::codegen() {
     auto l = lhs->codegen();
     auto r = rhs->codegen();

@@ -32,6 +32,17 @@ namespace ast {
         llvm::Value* codegen() override;
     };
 
+    class UnaryExprAST: public ExprAST {
+        char op;
+        std::unique_ptr<ExprAST> operand;
+        std::shared_ptr<LLVMContext> llvmContext;
+    public:
+        UnaryExprAST(char op, std::unique_ptr<ExprAST> operand, std::shared_ptr<LLVMContext> llvmContext):
+            op(op), operand(std::move(operand)), llvmContext(std::move(llvmContext)) {}
+
+        llvm::Value* codegen() override;
+    };
+
     class BinaryExprAST: public ExprAST {
         char op;
         std::unique_ptr<ExprAST> lhs;

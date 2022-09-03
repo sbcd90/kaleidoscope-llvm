@@ -14,6 +14,11 @@ extern "C" DLLEXPORT double putchard(double X) {
     return 0;
 }
 
+extern "C" DLLEXPORT double printd(double X) {
+    fprintf(stderr, "%f\n", X);
+    return 0;
+}
+
 int main() {
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
