@@ -16,7 +16,44 @@ llvm::Value* ast::VariableExprAST::codegen() {
     if (!v) {
         return logErrorV("Unknown variable name");
     }
-    return v;
+    return llvmContext->getBuilder()->CreateLoad(v->getAllocatedType(), v, name.c_str());
+}
+
+llvm::Value* ast::VarExprAST::codegen() {
+    std::vector<llvm::AllocaInst*> oldBindings;
+
+    auto theFunction = llvmContext->getBuilder()->GetInsertBlock()->getParent();
+    for (unsigned i = 0, e = varNames.size(); i != e; ++i) {
+        const std::string &varName = varNames[i].first;
+        auto init = varNames[i].second.get();
+
+        llvm::Value *initVal;
+        if (init) {
+            initVal = init->codegen();
+            if (!initVal) {
+                return nullptr;
+            }
+        } else {
+            initVal = llvm::ConstantFP::get(*llvmContext->getContext(), llvm::APFloat(0.0));
+        }
+
+        auto alloca = llvmContext->createEntryBlockAlloca(theFunction, varName);
+        llvmContext->getBuilder()->CreateStore(initVal, alloca);
+
+        oldBindings.push_back(namedValues[varName]);
+
+        namedValues[varName] = alloca;
+    }
+
+    auto bodyVal = body->codegen();
+    if (!bodyVal) {
+        return nullptr;
+    }
+
+    for (unsigned i = 0, e = varNames.size(); i != e; ++i) {
+        namedValues[varNames[i].first] = oldBindings[i];
+    }
+    return bodyVal;
 }
 
 llvm::Value* ast::UnaryExprAST::codegen() {
@@ -33,6 +70,25 @@ llvm::Value* ast::UnaryExprAST::codegen() {
 }
 
 llvm::Value* ast::BinaryExprAST::codegen() {
+    if (op == '=') {
+        auto lhse = static_cast<ast::VariableExprAST*>(lhs.get());
+
+        if (!lhse) {
+            return logErrorV("destination of '=' must be a variable");
+        }
+        auto val = rhs->codegen();
+        if (!val) {
+            return nullptr;
+        }
+
+        auto variable = namedValues[lhse->getName()];
+        if (!variable) {
+            return logErrorV("Unknown variable name");
+        }
+
+        llvmContext->getBuilder()->CreateStore(val, variable);
+        return val;
+    }
     auto l = lhs->codegen();
     auto r = rhs->codegen();
 
@@ -133,23 +189,27 @@ llvm::Value* ast::IfExprAST::codegen() {
 }
 
 llvm::Value* ast::ForExprAST::codegen() {
+    auto theFunction = llvmContext->getBuilder()->GetInsertBlock()->getParent();
+    auto alloca = llvmContext->createEntryBlockAlloca(theFunction, varName);
+
     auto startVal = start->codegen();
     if (!startVal) {
         return nullptr;
     }
 
-    auto theFunction = llvmContext->getBuilder()->GetInsertBlock()->getParent();
-    auto preHeaderBB = llvmContext->getBuilder()->GetInsertBlock();
+    llvmContext->getBuilder()->CreateStore(startVal, alloca);
+
+//    auto preHeaderBB = llvmContext->getBuilder()->GetInsertBlock();
     auto loopBB = llvm::BasicBlock::Create(*(llvmContext->getContext()), "loop", theFunction);
 
     llvmContext->getBuilder()->CreateBr(loopBB);
     llvmContext->getBuilder()->SetInsertPoint(loopBB);
 
-    auto variable = llvmContext->getBuilder()->CreatePHI(llvm::Type::getDoubleTy(*(llvmContext->getContext())), 2, varName);
-    variable->addIncoming(startVal, preHeaderBB);
+//    auto variable = llvmContext->getBuilder()->CreatePHI(llvm::Type::getDoubleTy(*(llvmContext->getContext())), 2, varName);
+//    variable->addIncoming(startVal, preHeaderBB);
 
     auto oldVal = ast::namedValues[varName];
-    ast::namedValues[varName] = variable;
+    ast::namedValues[varName] = alloca;
 
     if (!body->codegen()) {
         return nullptr;
@@ -165,22 +225,26 @@ llvm::Value* ast::ForExprAST::codegen() {
         stepVal = llvm::ConstantFP::get(*(llvmContext->getContext()), llvm::APFloat(1.0));
     }
 
-    auto nextVar = llvmContext->getBuilder()->CreateFAdd(variable, stepVal, "nextvar");
+//    auto nextVar = llvmContext->getBuilder()->CreateFAdd(variable, stepVal, "nextvar");
 
     auto endCond = end->codegen();
     if (!endCond) {
         return nullptr;
     }
 
+    auto curVar = llvmContext->getBuilder()->CreateLoad(alloca->getAllocatedType(), alloca, varName.c_str());
+    auto nextVar = llvmContext->getBuilder()->CreateFAdd(curVar, stepVal, "nextvar");
+    llvmContext->getBuilder()->CreateStore(nextVar, alloca);
+
     endCond = llvmContext->getBuilder()->CreateFCmpONE(endCond, llvm::ConstantFP::get(*(llvmContext->getContext()), llvm::APFloat(0.0)), "loopcond");
 
-    auto loopEndBB = llvmContext->getBuilder()->GetInsertBlock();
+//    auto loopEndBB = llvmContext->getBuilder()->GetInsertBlock();
     auto afterBB = llvm::BasicBlock::Create(*(llvmContext->getContext()), "afterloop", theFunction);
 
     llvmContext->getBuilder()->CreateCondBr(endCond, loopBB, afterBB);
     llvmContext->getBuilder()->SetInsertPoint(afterBB);
 
-    variable->addIncoming(nextVar, loopEndBB);
+//    variable->addIncoming(nextVar, loopEndBB);
 
     if (oldVal) {
         namedValues[varName] = oldVal;
@@ -222,7 +286,10 @@ llvm::Function* ast::FunctionAST::codegen() {
 
     namedValues.clear();
     for (auto &arg: theFunction->args()) {
-        namedValues[std::string{arg.getName()}] = &arg;
+        auto alloca = llvmContext->createEntryBlockAlloca(theFunction, arg.getName());
+        llvmContext->getBuilder()->CreateStore(&arg, alloca);
+
+        namedValues[std::string{arg.getName()}] = alloca;
     }
 
     if (auto retVal = body->codegen()) {
@@ -233,5 +300,8 @@ llvm::Function* ast::FunctionAST::codegen() {
     }
 
     theFunction->eraseFromParent();
+    if (p.isBinaryOp()) {
+        llvmContext->eraseFromBinOpPrecedence(p.getOperatorName());
+    }
     return nullptr;
 }

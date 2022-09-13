@@ -17,7 +17,9 @@ enum Token {
     tokBinary = -11,
     tokUnary = -12,
 
-    tokWhile = -14
+    tokVar = -14,
+
+    tokWhile = -15
 };
 
 static std::string identifierStr;
@@ -62,6 +64,9 @@ static int getTok() {
         }
         if (identifierStr == "unary") {
             return tokUnary;
+        }
+        if (identifierStr == "var") {
+            return tokVar;
         }
         if (identifierStr == "while") {
             return tokWhile;

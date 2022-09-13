@@ -6,7 +6,7 @@
 #include "LLVM.h"
 
 namespace ast {
-    static std::map<std::string, llvm::Value*> namedValues;
+    static std::map<std::string, llvm::AllocaInst*> namedValues;
 
     class ExprAST {
     public:
@@ -30,6 +30,10 @@ namespace ast {
         VariableExprAST(std::string name, std::shared_ptr<LLVMContext> llvmContext): name(std::move(name)), llvmContext(std::move(llvmContext)) {}
 
         llvm::Value* codegen() override;
+
+        inline const std::string& getName() const {
+            return name;
+        }
     };
 
     class UnaryExprAST: public ExprAST {
@@ -158,5 +162,17 @@ namespace ast {
             proto(std::move(proto)), body(std::move(body)), llvmContext(std::move(llvmContext)) {}
 
         llvm::Function* codegen();
+    };
+
+    class VarExprAST : public ExprAST {
+        std::vector<std::pair<std::string, std::unique_ptr<ast::ExprAST>>> varNames;
+        std::unique_ptr<ast::ExprAST> body;
+        std::shared_ptr<LLVMContext> llvmContext;
+    public:
+        VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ast::ExprAST>>> varNames,
+                   std::unique_ptr<ast::ExprAST> body, std::shared_ptr<LLVMContext> llvmContext):
+                   varNames(std::move(varNames)), body(std::move(body)), llvmContext(std::move(llvmContext)) {}
+
+        llvm::Value* codegen() override;
     };
 }

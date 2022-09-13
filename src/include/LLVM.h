@@ -20,6 +20,7 @@ class LLVMContext {
 public:
     LLVMContext() {
         binOpPrecedence = std::map<char, int>{};
+        binOpPrecedence['='] = 2;
         binOpPrecedence['<'] = 10;
         binOpPrecedence['+'] = 20;
         binOpPrecedence['-'] = 20;
@@ -54,6 +55,10 @@ public:
 
     void addToBinOpPrecedence(std::pair<char, int> binOp) {
         binOpPrecedence[binOp.first] = binOp.second;
+    }
+
+    void eraseFromBinOpPrecedence(char binOp) {
+        binOpPrecedence.erase(binOp);
     }
 
     void initializeModuleAndPassManager() {
@@ -92,5 +97,10 @@ public:
         auto tsm = llvm::orc::ThreadSafeModule{std::move(theModule), std::move(theContext)};
         exitOnError(theJit->addModule(std::move(tsm)));
         initializeModuleAndPassManager();
+    }
+
+    llvm::AllocaInst* createEntryBlockAlloca(llvm::Function *theFunction, llvm::StringRef varName) {
+        llvm::IRBuilder<> tmpB{&theFunction->getEntryBlock(), theFunction->getEntryBlock().begin()};
+        return tmpB.CreateAlloca(llvm::Type::getDoubleTy(*theContext), nullptr, varName);
     }
 };
