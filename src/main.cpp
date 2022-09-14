@@ -20,16 +20,18 @@ extern "C" DLLEXPORT double printd(double X) {
 }
 
 int main() {
-    llvm::InitializeNativeTarget();
+/*    llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
-    llvm::InitializeNativeTargetAsmParser();
-
-    auto llvmContext = std::make_shared<LLVMContext>();
+    llvm::InitializeNativeTargetAsmParser();*/
 
     std::cout << "ready> ";
     getNextToken();
+
+    auto llvmContext = std::make_shared<LLVMContext>();
+
     mainLoop(llvmContext);
 
-    llvmContext->getModule()->print(llvm::errs(), nullptr);
+//    llvmContext->getModule()->print(llvm::errs(), nullptr);
+    llvmContext->initializeTargetRegistry();
     return 0;
 }

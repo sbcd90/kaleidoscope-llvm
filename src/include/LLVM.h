@@ -1,7 +1,12 @@
+#include <llvm/ADT/Optional.h>
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Support/Host.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/TargetRegistry.h>
+#include <llvm/Target/TargetOptions.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
@@ -64,18 +69,67 @@ public:
     void initializeModuleAndPassManager() {
         theContext = std::make_unique<llvm::LLVMContext>();
         theModule = std::make_unique<llvm::Module>("my cool jit", *theContext);
-        theModule->setDataLayout(theJit->getDataLayout());
+//        theModule->setDataLayout(theJit->getDataLayout());
 
         builder = std::make_unique<llvm::IRBuilder<>>(*theContext);
 
-        theFPM = std::make_unique<llvm::legacy::FunctionPassManager>(theModule.get());
+/*        theFPM = std::make_unique<llvm::legacy::FunctionPassManager>(theModule.get());
 
         theFPM->add(llvm::createInstructionCombiningPass());
         theFPM->add(llvm::createReassociatePass());
         theFPM->add(llvm::createGVNPass());
         theFPM->add(llvm::createCFGSimplificationPass());
 
-        theFPM->doInitialization();
+        theFPM->doInitialization();*/
+    }
+
+    void initializeTargetRegistry() {
+        llvm::InitializeAllTargetInfos();
+        llvm::InitializeAllTargets();
+        llvm::InitializeAllTargetMCs();
+        llvm::InitializeAllAsmParsers();
+        llvm::InitializeAllAsmPrinters();
+
+        auto targetTriple = llvm::sys::getDefaultTargetTriple();
+        theModule->setTargetTriple(targetTriple);
+
+        std::string error;
+        auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+
+        if (!target) {
+            llvm::errs() << error;
+            return;
+        }
+
+        auto cpu = "generic";
+        auto features = "";
+
+        llvm::TargetOptions opt;
+        auto rm = llvm::Optional<llvm::Reloc::Model>();
+        auto theTargetMachine = target->createTargetMachine(targetTriple, cpu, features, opt, rm);
+
+        theModule->setDataLayout(theTargetMachine->createDataLayout());
+
+        auto filename = "output.o";
+        std::error_code ec;
+        llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
+
+        if (ec) {
+            llvm::errs() << "Could not open file: " << ec.message();
+            return;
+        }
+
+        llvm::legacy::PassManager pass;
+        auto fileType = llvm::CGFT_ObjectFile;
+
+        if (theTargetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
+            llvm::errs() << "TheTargetMachine can't emit a file of this type";
+        }
+
+        pass.run(*theModule);
+        dest.flush();
+
+        llvm::outs() << "Wrote " << filename << "\n";
     }
 
     void handleTopLevelExprJit() {
