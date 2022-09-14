@@ -384,7 +384,7 @@ static void handleDefinition(const std::shared_ptr<LLVMContext> &llvmContext) {
 /*            std::cout << "Read function definition:" << std::endl;
             fnIR->print(llvm::errs());
             std::cout << std::endl;*/
-            llvmContext->handleDefinition();
+//            llvmContext->handleDefinition();
         }
     } else {
         getNextToken();
@@ -406,15 +406,16 @@ static void handleExtern(const std::shared_ptr<LLVMContext> &llvmContext) {
 
 static void handleTopLevelExpression(const std::shared_ptr<LLVMContext> &llvmContext) {
     if (auto fnAst = parseTopLevelExpr(llvmContext)) {
-        if (auto *fnIR = fnAst->codegen()) {
-/*            std::cout << "Read top-level expression:" << std::endl;
-            fnIR->print(llvm::errs());
+        fnAst->codegen();
+/*       if (auto *fnIR = fnAst->codegen()) {
+                   std::cout << "Read top-level expression:" << std::endl;
+                   fnIR->print(llvm::errs());
 
-            std::cout << std::endl;*/
+                   std::cout << std::endl;
 
             llvmContext->handleTopLevelExprJit();
-//            fnIR->eraseFromParent();
-        }
+            fnIR->eraseFromParent();
+        }*/
     } else {
         getNextToken();
     }

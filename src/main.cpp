@@ -1,5 +1,4 @@
 #include <iostream>
-#include "llvm/Support/TargetSelect.h"
 #include "Parser.h"
 
 #ifdef _WIN32

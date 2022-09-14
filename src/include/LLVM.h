@@ -3,23 +3,31 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Host.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/TargetRegistry.h>
+#include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
+#include <algorithm>
+#include <cassert>
+#include <cctype>
+#include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <iostream>
-#include "../include/KaleidoscopeJIT.h"
+#include <system_error>
+#include <utility>
 
 class LLVMContext {
     std::unique_ptr<llvm::LLVMContext> theContext;
     std::unique_ptr<llvm::Module> theModule;
     std::unique_ptr<llvm::IRBuilder<>> builder;
-    std::unique_ptr<llvm::legacy::FunctionPassManager> theFPM;
-    std::unique_ptr<llvm::orc::KaleidoscopeJIT> theJit;
+//    std::unique_ptr<llvm::legacy::FunctionPassManager> theFPM;
+//    std::unique_ptr<llvm::orc::KaleidoscopeJIT> theJit;
     std::map<char, int> binOpPrecedence;
     llvm::ExitOnError exitOnError;
 public:
@@ -30,7 +38,7 @@ public:
         binOpPrecedence['+'] = 20;
         binOpPrecedence['-'] = 20;
         binOpPrecedence['*'] = 40;
-        theJit = exitOnError(llvm::orc::KaleidoscopeJIT::Create());
+//        theJit = exitOnError(llvm::orc::KaleidoscopeJIT::Create());
         initializeModuleAndPassManager();
     }
 
@@ -46,13 +54,13 @@ public:
         return builder;
     }
 
-    inline const std::unique_ptr<llvm::legacy::FunctionPassManager>& getFPM() const {
-        return theFPM;
-    }
+/*   inline const std::unique_ptr<llvm::legacy::FunctionPassManager>& getFPM() const {
+           return theFPM;
+       }
 
-    inline const std::unique_ptr<llvm::orc::KaleidoscopeJIT>& getJit() const {
-        return theJit;
-    }
+       inline const std::unique_ptr<llvm::orc::KaleidoscopeJIT>& getJit() const {
+           return theJit;
+       }*/
 
     inline const std::map<char, int>& getBinOpPrecedence() const {
         return binOpPrecedence;
@@ -110,7 +118,7 @@ public:
 
         theModule->setDataLayout(theTargetMachine->createDataLayout());
 
-        auto filename = "output.o";
+        auto filename = "/home/sbcd90/Documents/programs/kaleidoscope-llvm/src/output.o";
         std::error_code ec;
         llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
 
@@ -132,7 +140,7 @@ public:
         llvm::outs() << "Wrote " << filename << "\n";
     }
 
-    void handleTopLevelExprJit() {
+/*    void handleTopLevelExprJit() {
         auto rt = theJit->getMainJITDylib().createResourceTracker();
         auto tsm = llvm::orc::ThreadSafeModule{std::move(theModule), std::move(theContext)};
         exitOnError(theJit->addModule(std::move(tsm), rt));
@@ -151,7 +159,7 @@ public:
         auto tsm = llvm::orc::ThreadSafeModule{std::move(theModule), std::move(theContext)};
         exitOnError(theJit->addModule(std::move(tsm)));
         initializeModuleAndPassManager();
-    }
+    }*/
 
     llvm::AllocaInst* createEntryBlockAlloca(llvm::Function *theFunction, llvm::StringRef varName) {
         llvm::IRBuilder<> tmpB{&theFunction->getEntryBlock(), theFunction->getEntryBlock().begin()};

@@ -295,7 +295,7 @@ llvm::Function* ast::FunctionAST::codegen() {
     if (auto retVal = body->codegen()) {
         llvmContext->getBuilder()->CreateRet(retVal);
         llvm::verifyFunction(*theFunction);
-        llvmContext->getFPM()->run(*theFunction);
+//        llvmContext->getFPM()->run(*theFunction);
         return theFunction;
     }
 

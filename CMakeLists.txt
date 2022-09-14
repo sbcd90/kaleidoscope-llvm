@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.19)
 project(kaleidoscope_llvm)
 
 set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_COMPILER /usr/local/opt/llvm/bin/clang++)
-set(MY_CALC_LLVM_CONFIG /usr/local/opt/llvm/bin/llvm-config)
+set(CMAKE_CXX_COMPILER /usr/lib/ccache/clang++)
+set(MY_CALC_LLVM_CONFIG /usr/bin/llvm-config-13)
 
 message(STATUS "detected for llvm-config: ${MY_CALC_LLVM_CONFIG}")
 
@@ -31,6 +31,14 @@ execute_process(
 )
 execute_process(
         COMMAND
+        ${MY_CALC_LLVM_CONFIG} --cxxflags
+        OUTPUT_VARIABLE
+        LLVM_SYS_LIBS_STRING
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+string(REGEX MATCHALL "-l([^ ]+)" LLVM_SYS_LIBS ${LLVM_SYS_LIBS_STRING})
+execute_process(
+        COMMAND
         ${MY_CALC_LLVM_CONFIG} --ldflags
         OUTPUT_VARIABLE
         LLVM_SYS_LIBS_STRING
@@ -41,6 +49,15 @@ string(REGEX MATCHALL "-l([^ ]+)" LLVM_SYS_LIBS ${LLVM_SYS_LIBS_STRING})
 execute_process(
         COMMAND
         ${MY_CALC_LLVM_CONFIG} --libs core
+        OUTPUT_VARIABLE
+        LLVM_LIBS_STRING
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+string(REGEX MATCHALL "-l([^ ]+)" LLVM_LIBS ${LLVM_LIBS_STRING})
+
+execute_process(
+        COMMAND
+        ${MY_CALC_LLVM_CONFIG} --libs all
         OUTPUT_VARIABLE
         LLVM_LIBS_STRING
         OUTPUT_STRIP_TRAILING_WHITESPACE
