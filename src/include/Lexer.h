@@ -1,3 +1,5 @@
+#include "Debugger.h"
+
 enum Token {
     tokEof = -1,
 
@@ -29,12 +31,13 @@ static int getTok() {
     static int lastChar = ' ';
 
     while (isspace(lastChar)) {
-        lastChar = getchar();
+        lastChar = advance();
     }
+    curLoc = lexLoc;
 
     if (isalpha(lastChar)) {
         identifierStr = lastChar;
-        while (isalnum(lastChar = getchar())) {
+        while (isalnum(lastChar = advance())) {
             identifierStr += lastChar;
         }
 
@@ -78,7 +81,7 @@ static int getTok() {
         std::string numStr;
         do {
             numStr += lastChar;
-            lastChar = getchar();
+            lastChar = advance();
         } while (isdigit(lastChar) || lastChar == '.');
         numVal = strtod(numStr.c_str(), nullptr);
         return tokNumber;
@@ -86,7 +89,7 @@ static int getTok() {
 
     if (lastChar == '#') {
         do {
-            lastChar = getchar();
+            lastChar = advance();
         } while (lastChar != EOF && lastChar != '\n' && lastChar != '\r');
 
         if (lastChar != EOF) {
@@ -99,6 +102,6 @@ static int getTok() {
     }
 
     int thisChar = lastChar;
-    lastChar = getchar();
+    lastChar = advance();
     return thisChar;
 }

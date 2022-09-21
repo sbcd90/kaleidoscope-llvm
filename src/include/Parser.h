@@ -58,10 +58,11 @@ static std::unique_ptr<ast::ExprAST> parseParenExpr(const std::shared_ptr<LLVMCo
 
 static std::unique_ptr<ast::ExprAST> parseIdentifierExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
     auto idName = identifierStr;
+    SourceLocation litLoc = curLoc;
     getNextToken();
 
     if (curTok != '(') {
-        return std::make_unique<ast::VariableExprAST>(idName, llvmContext);
+        return std::make_unique<ast::VariableExprAST>(litLoc, idName, llvmContext);
     }
 
     getNextToken();
@@ -86,10 +87,11 @@ static std::unique_ptr<ast::ExprAST> parseIdentifierExpr(const std::shared_ptr<L
     }
 
     getNextToken();
-    return std::make_unique<ast::CallexprAST>(idName, std::move(args), llvmContext);
+    return std::make_unique<ast::CallexprAST>(litLoc, idName, std::move(args), llvmContext);
 }
 
 static std::unique_ptr<ast::ExprAST> parseIfExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+    SourceLocation ifLoc = curLoc;
     getNextToken();
 
     auto cond = parseExpression(llvmContext);
@@ -118,7 +120,7 @@ static std::unique_ptr<ast::ExprAST> parseIfExpr(const std::shared_ptr<LLVMConte
         return nullptr;
     }
 
-    return std::make_unique<ast::IfExprAST>(std::move(cond), std::move(then), std::move(else_), llvmContext);
+    return std::make_unique<ast::IfExprAST>(ifLoc, std::move(cond), std::move(then), std::move(else_), llvmContext);
 }
 
 static std::unique_ptr<ast::ExprAST> parseForExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
@@ -261,6 +263,7 @@ static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
             return lhs;
         }
         auto binOp = curTok;
+        SourceLocation binLoc = curLoc;
         getNextToken();
 
         auto rhs = parseUnary(llvmContext);
@@ -276,7 +279,7 @@ static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
             }
         }
 
-        lhs = std::make_unique<ast::BinaryExprAST>(binOp, std::move(lhs), std::move(rhs), llvmContext);
+        lhs = std::make_unique<ast::BinaryExprAST>(binLoc, binOp, std::move(lhs), std::move(rhs), llvmContext);
     }
 }
 
@@ -291,6 +294,8 @@ static std::unique_ptr<ast::ExprAST> parseExpression(const std::shared_ptr<LLVMC
 static std::unique_ptr<ast::PrototypeAST> parsePrototype(const std::shared_ptr<LLVMContext> &llvmContext) {
     using namespace std::string_literals;
     std::string fnName;
+
+    SourceLocation fnLoc = curLoc;
 
     unsigned kind = 0;
     unsigned binaryPrecedence = 30;
@@ -348,7 +353,7 @@ static std::unique_ptr<ast::PrototypeAST> parsePrototype(const std::shared_ptr<L
     if (kind && argNames.size() != kind) {
         return logErrorP("Invalid number of operands for operator"s);
     }
-    return std::make_unique<ast::PrototypeAST>(fnName, std::move(argNames), llvmContext, kind != 0, binaryPrecedence);
+    return std::make_unique<ast::PrototypeAST>(fnLoc, fnName, std::move(argNames), llvmContext, kind != 0, binaryPrecedence);
 }
 
 static std::unique_ptr<ast::FunctionAST> parseDefinition(const std::shared_ptr<LLVMContext> &llvmContext) {
@@ -365,8 +370,9 @@ static std::unique_ptr<ast::FunctionAST> parseDefinition(const std::shared_ptr<L
 }
 
 static std::unique_ptr<ast::FunctionAST> parseTopLevelExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+    SourceLocation fnLoc = curLoc;
     if (auto e = parseExpression(llvmContext)) {
-        auto proto = std::make_unique<ast::PrototypeAST>("__anon_expr",
+        auto proto = std::make_unique<ast::PrototypeAST>(fnLoc, "__anon_expr",
                                                          std::vector<std::string>{}, llvmContext);
         return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e), llvmContext);
     }
