@@ -6,10 +6,13 @@ struct DebugInfo {
     llvm::DICompileUnit *theCU;
     llvm::DIType *dblTy;
     std::vector<llvm::DIScope*> lexicalBlocks;
+    std::shared_ptr<LLVMContext> llvmContext;
+
+    DebugInfo(std::shared_ptr<LLVMContext> llvmContext): llvmContext(std::move(llvmContext)) {}
 
     void emitLocation(ast::ExprAST *ast);
     llvm::DIType *getDoubleTy();
-} KSDbgInfo;
+};
 
 struct SourceLocation {
     int line;
