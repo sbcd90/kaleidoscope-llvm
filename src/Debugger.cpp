@@ -1,14 +1,14 @@
 #include "Debugger.h"
 
-llvm::DIType* DebugInfo::getDoubleTy() {
+llvm::DIType* ast::DebugInfo::getDoubleTy() {
     if (dblTy) {
         return dblTy;
     }
-    dblTy = dBuilder->createBasicType("double", 64, llvm::dwarf::DW_ATE_float);
+    dblTy = llvmContext->getDBuilder()->createBasicType("double", 64, llvm::dwarf::DW_ATE_float);
     return dblTy;
 }
 
-void DebugInfo::emitLocation(ast::ExprAST *ast) {
+void ast::DebugInfo::emitLocation(ast::ExprAST *ast) {
     if (!ast) {
         return llvmContext->getBuilder()->SetCurrentDebugLocation(llvm::DebugLoc{});
     }

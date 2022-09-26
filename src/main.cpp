@@ -27,10 +27,15 @@ int main() {
     getNextToken();
 
     auto llvmContext = std::make_shared<LLVMContext>();
+    auto ksDebugInfo = std::make_shared<ast::DebugInfo>(llvmContext);
 
-    mainLoop(llvmContext);
+    ksDebugInfo->theCU = llvmContext->getDBuilder()->createCompileUnit(llvm::dwarf::DW_LANG_C, llvmContext->getDBuilder()->createFile("fib.ks", "/home/sbcd90/Documents/programs/kaleidoscope-llvm/src"),
+                                                     "Kaleidoscope Compiler", false, "", 0);
+
+    mainLoop(llvmContext, ksDebugInfo);
 
 //    llvmContext->getModule()->print(llvm::errs(), nullptr);
     llvmContext->initializeTargetRegistry();
+    llvmContext->getDBuilder()->finalize();
     return 0;
 }

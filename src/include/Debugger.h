@@ -2,36 +2,15 @@
 #include "Ast.h"
 #include <vector>
 
-struct DebugInfo {
-    llvm::DICompileUnit *theCU;
-    llvm::DIType *dblTy;
-    std::vector<llvm::DIScope*> lexicalBlocks;
-    std::shared_ptr<LLVMContext> llvmContext;
 
-    DebugInfo(std::shared_ptr<LLVMContext> llvmContext): llvmContext(std::move(llvmContext)) {}
+static llvm::DISubroutineType* CreateFunctionType(unsigned numArgs, const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
+    llvm::SmallVector<llvm::Metadata*, 8> eltTys{};
 
-    void emitLocation(ast::ExprAST *ast);
-    llvm::DIType *getDoubleTy();
-};
+    auto dblTy = ksDebugInfo->getDoubleTy();
 
-struct SourceLocation {
-    int line;
-    int col;
-};
-
-static SourceLocation curLoc;
-static SourceLocation lexLoc{1, 0};
-
-static int advance() {
-    auto lastChar = getchar();
-
-    if (lastChar == '\n' || lastChar == '\r') {
-        ++lexLoc.line;
-        lexLoc.col = 0;
-    } else {
-        ++lexLoc.col;
+    eltTys.push_back(dblTy);
+    for (unsigned i = 0, e = numArgs; i != e; ++i) {
+        eltTys.push_back(dblTy);
     }
-    return lastChar;
+    return llvmContext->getDBuilder()->createSubroutineType(llvmContext->getDBuilder()->getOrCreateTypeArray(eltTys));
 }
-
-static std::unique_ptr<llvm::DIBuilder> dBuilder;

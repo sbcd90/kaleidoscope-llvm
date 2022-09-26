@@ -26,7 +26,8 @@ class LLVMContext {
     std::unique_ptr<llvm::LLVMContext> theContext;
     std::unique_ptr<llvm::Module> theModule;
     std::unique_ptr<llvm::IRBuilder<>> builder;
-//    std::unique_ptr<llvm::legacy::FunctionPassManager> theFPM;
+    std::unique_ptr<llvm::DIBuilder> dBuilder;
+    //    std::unique_ptr<llvm::legacy::FunctionPassManager> theFPM;
 //    std::unique_ptr<llvm::orc::KaleidoscopeJIT> theJit;
     std::map<char, int> binOpPrecedence;
     llvm::ExitOnError exitOnError;
@@ -52,6 +53,10 @@ public:
 
     inline const std::unique_ptr<llvm::IRBuilder<>>& getBuilder() const {
         return builder;
+    }
+
+    inline const std::unique_ptr<llvm::DIBuilder>& getDBuilder() {
+        return dBuilder;
     }
 
 /*   inline const std::unique_ptr<llvm::legacy::FunctionPassManager>& getFPM() const {
@@ -80,6 +85,14 @@ public:
 //        theModule->setDataLayout(theJit->getDataLayout());
 
         builder = std::make_unique<llvm::IRBuilder<>>(*theContext);
+
+        dBuilder = std::make_unique<llvm::DIBuilder>(*theModule);
+
+        theModule->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+
+        if (llvm::Triple{llvm::sys::getProcessTriple()}.isOSDarwin()) {
+            theModule->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
+        }
 
 /*        theFPM = std::make_unique<llvm::legacy::FunctionPassManager>(theModule.get());
 
@@ -164,5 +177,9 @@ public:
     llvm::AllocaInst* createEntryBlockAlloca(llvm::Function *theFunction, llvm::StringRef varName) {
         llvm::IRBuilder<> tmpB{&theFunction->getEntryBlock(), theFunction->getEntryBlock().begin()};
         return tmpB.CreateAlloca(llvm::Type::getDoubleTy(*theContext), nullptr, varName);
+    }
+
+    llvm::raw_ostream& indent(llvm::raw_ostream &o, int size) {
+        return o << std::string(size, ' ');
     }
 };

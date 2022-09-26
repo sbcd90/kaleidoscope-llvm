@@ -8,6 +8,7 @@ static llvm::Value* logErrorV(const char *str) {
 }
 
 llvm::Value* ast::NumberExprAST::codegen() {
+    ksDebugInfo->emitLocation(this);
     return llvm::ConstantFP::get(*llvmContext->getContext(), llvm::APFloat{val});
 }
 
@@ -16,6 +17,7 @@ llvm::Value* ast::VariableExprAST::codegen() {
     if (!v) {
         return logErrorV("Unknown variable name");
     }
+    ksDebugInfo->emitLocation(this);
     return llvmContext->getBuilder()->CreateLoad(v->getAllocatedType(), v, name.c_str());
 }
 
@@ -44,6 +46,7 @@ llvm::Value* ast::VarExprAST::codegen() {
 
         namedValues[varName] = alloca;
     }
+    ksDebugInfo->emitLocation(this);
 
     auto bodyVal = body->codegen();
     if (!bodyVal) {
@@ -66,10 +69,12 @@ llvm::Value* ast::UnaryExprAST::codegen() {
     if (!f) {
         return logErrorV("Unknown unary operator");
     }
+    ksDebugInfo->emitLocation(this);
     return llvmContext->getBuilder()->CreateCall(f, operandV, "unop");
 }
 
 llvm::Value* ast::BinaryExprAST::codegen() {
+    ksDebugInfo->emitLocation(this);
     if (op == '=') {
         auto lhse = static_cast<ast::VariableExprAST*>(lhs.get());
 
@@ -119,6 +124,7 @@ llvm::Value* ast::BinaryExprAST::codegen() {
 }
 
 llvm::Value* ast::CallexprAST::codegen() {
+    ksDebugInfo->emitLocation(this);
     auto calleeF = ast::getFunction(llvmContext, callee);
     if (!calleeF) {
         return logErrorV("Unknown function referenced");
@@ -142,6 +148,7 @@ llvm::Value* ast::CallexprAST::codegen() {
 }
 
 llvm::Value* ast::IfExprAST::codegen() {
+    ksDebugInfo->emitLocation(this);
     auto condV = cond->codegen();
     if (!condV) {
         return nullptr;
@@ -192,6 +199,8 @@ llvm::Value* ast::ForExprAST::codegen() {
     auto theFunction = llvmContext->getBuilder()->GetInsertBlock()->getParent();
     auto alloca = llvmContext->createEntryBlockAlloca(theFunction, varName);
 
+    ksDebugInfo->emitLocation(this);
+
     auto startVal = start->codegen();
     if (!startVal) {
         return nullptr;
@@ -215,7 +224,7 @@ llvm::Value* ast::ForExprAST::codegen() {
         return nullptr;
     }
 
-    llvm::Value *stepVal;
+    llvm::Value *stepVal = nullptr;
     if (step) {
         stepVal = step->codegen();
         if (!stepVal) {
@@ -284,16 +293,39 @@ llvm::Function* ast::FunctionAST::codegen() {
     auto bb = llvm::BasicBlock::Create(*llvmContext->getContext(), "entry", theFunction);
     llvmContext->getBuilder()->SetInsertPoint(bb);
 
+    auto unit = llvmContext->getDBuilder()->createFile(ksDebugInfo->theCU->getFilename(),
+                                     ksDebugInfo->theCU->getDirectory());
+    llvm::DIScope *fContext = unit;
+    unsigned lineNo = p.getLine();
+    unsigned scopeLine = lineNo;
+    llvm::DISubprogram *sp = llvmContext->getDBuilder()->createFunction(
+            fContext, p.getName(), llvm::StringRef{}, unit, lineNo,
+            CreateFunctionType(theFunction->arg_size(), llvmContext, ksDebugInfo), scopeLine,
+            llvm::DINode::FlagPrototyped, llvm::DISubprogram::SPFlagDefinition);
+    theFunction->setSubprogram(sp);
+
+    ksDebugInfo->lexicalBlocks.push_back(sp);
+    ksDebugInfo->emitLocation(nullptr);
+
     namedValues.clear();
+    unsigned argIdx = 0;
     for (auto &arg: theFunction->args()) {
         auto alloca = llvmContext->createEntryBlockAlloca(theFunction, arg.getName());
+
+        llvm::DILocalVariable *d = llvmContext->getDBuilder()->createParameterVariable(
+                sp, arg.getName(), ++argIdx, unit, lineNo, ksDebugInfo->getDoubleTy(), true);
+        llvmContext->getDBuilder()->insertDeclare(alloca, d, llvmContext->getDBuilder()->createExpression(), llvm::DILocation::get(sp->getContext(), lineNo, 0, sp),
+                                llvmContext->getBuilder()->GetInsertBlock());
+
         llvmContext->getBuilder()->CreateStore(&arg, alloca);
 
         namedValues[std::string{arg.getName()}] = alloca;
     }
+    ksDebugInfo->emitLocation(body.get());
 
     if (auto retVal = body->codegen()) {
         llvmContext->getBuilder()->CreateRet(retVal);
+        ksDebugInfo->lexicalBlocks.pop_back();
         llvm::verifyFunction(*theFunction);
 //        llvmContext->getFPM()->run(*theFunction);
         return theFunction;
@@ -303,5 +335,6 @@ llvm::Function* ast::FunctionAST::codegen() {
     if (p.isBinaryOp()) {
         llvmContext->eraseFromBinOpPrecedence(p.getOperatorName());
     }
+    ksDebugInfo->lexicalBlocks.pop_back();
     return nullptr;
 }

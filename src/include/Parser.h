@@ -1,4 +1,3 @@
-#include "Ast.h"
 #include "Lexer.h"
 #include <map>
 #include <iostream>
@@ -34,17 +33,17 @@ static std::unique_ptr<ast::PrototypeAST> logErrorP(std::string s) {
     return nullptr;
 }
 
-static std::unique_ptr<ast::ExprAST> parseExpression(const std::shared_ptr<LLVMContext> &llvmContext);
+static std::unique_ptr<ast::ExprAST> parseExpression(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo);
 
-static std::unique_ptr<ast::ExprAST> parseNumberExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
-    auto result = std::make_unique<ast::NumberExprAST>(numVal, llvmContext);
+static std::unique_ptr<ast::ExprAST> parseNumberExpr(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
+    auto result = std::make_unique<ast::NumberExprAST>(numVal, llvmContext, ksDebugInfo);
     getNextToken();
     return std::move(result);
 }
 
-static std::unique_ptr<ast::ExprAST> parseParenExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::ExprAST> parseParenExpr(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     getNextToken();
-    auto v = parseExpression(llvmContext);
+    auto v = parseExpression(llvmContext, ksDebugInfo);
     if (!v) {
         return nullptr;
     }
@@ -56,13 +55,13 @@ static std::unique_ptr<ast::ExprAST> parseParenExpr(const std::shared_ptr<LLVMCo
     return v;
 }
 
-static std::unique_ptr<ast::ExprAST> parseIdentifierExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::ExprAST> parseIdentifierExpr(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     auto idName = identifierStr;
     SourceLocation litLoc = curLoc;
     getNextToken();
 
     if (curTok != '(') {
-        return std::make_unique<ast::VariableExprAST>(litLoc, idName, llvmContext);
+        return std::make_unique<ast::VariableExprAST>(litLoc, idName, llvmContext, ksDebugInfo);
     }
 
     getNextToken();
@@ -70,7 +69,7 @@ static std::unique_ptr<ast::ExprAST> parseIdentifierExpr(const std::shared_ptr<L
 
     if (curTok != ')') {
         while (true) {
-            if (auto arg = parseExpression(llvmContext)) {
+            if (auto arg = parseExpression(llvmContext, ksDebugInfo)) {
                 args.push_back(std::move(arg));
             } else {
                 return nullptr;
@@ -87,14 +86,14 @@ static std::unique_ptr<ast::ExprAST> parseIdentifierExpr(const std::shared_ptr<L
     }
 
     getNextToken();
-    return std::make_unique<ast::CallexprAST>(litLoc, idName, std::move(args), llvmContext);
+    return std::make_unique<ast::CallexprAST>(litLoc, idName, std::move(args), llvmContext, ksDebugInfo);
 }
 
-static std::unique_ptr<ast::ExprAST> parseIfExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::ExprAST> parseIfExpr(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     SourceLocation ifLoc = curLoc;
     getNextToken();
 
-    auto cond = parseExpression(llvmContext);
+    auto cond = parseExpression(llvmContext, ksDebugInfo);
     if (!cond) {
         return nullptr;
     }
@@ -104,7 +103,7 @@ static std::unique_ptr<ast::ExprAST> parseIfExpr(const std::shared_ptr<LLVMConte
     }
     getNextToken();
 
-    auto then = parseExpression(llvmContext);
+    auto then = parseExpression(llvmContext, ksDebugInfo);
     if (!then) {
         return nullptr;
     }
@@ -115,15 +114,15 @@ static std::unique_ptr<ast::ExprAST> parseIfExpr(const std::shared_ptr<LLVMConte
 
     getNextToken();
 
-    auto else_ = parseExpression(llvmContext);
+    auto else_ = parseExpression(llvmContext, ksDebugInfo);
     if (!else_) {
         return nullptr;
     }
 
-    return std::make_unique<ast::IfExprAST>(ifLoc, std::move(cond), std::move(then), std::move(else_), llvmContext);
+    return std::make_unique<ast::IfExprAST>(ifLoc, std::move(cond), std::move(then), std::move(else_), llvmContext, ksDebugInfo);
 }
 
-static std::unique_ptr<ast::ExprAST> parseForExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::ExprAST> parseForExpr(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     getNextToken();
 
     if (curTok != tokIdentifier) {
@@ -138,7 +137,7 @@ static std::unique_ptr<ast::ExprAST> parseForExpr(const std::shared_ptr<LLVMCont
     }
     getNextToken();
 
-    auto start = parseExpression(llvmContext);
+    auto start = parseExpression(llvmContext, ksDebugInfo);
     if (!start) {
         return nullptr;
     }
@@ -147,7 +146,7 @@ static std::unique_ptr<ast::ExprAST> parseForExpr(const std::shared_ptr<LLVMCont
     }
     getNextToken();
 
-    auto end = parseExpression(llvmContext);
+    auto end = parseExpression(llvmContext, ksDebugInfo);
     if (!end) {
         return nullptr;
     }
@@ -155,7 +154,7 @@ static std::unique_ptr<ast::ExprAST> parseForExpr(const std::shared_ptr<LLVMCont
     std::unique_ptr<ast::ExprAST> step;
     if (curTok == ',') {
         getNextToken();
-        step = parseExpression(llvmContext);
+        step = parseExpression(llvmContext, ksDebugInfo);
 
         if (!step) {
             return nullptr;
@@ -167,15 +166,15 @@ static std::unique_ptr<ast::ExprAST> parseForExpr(const std::shared_ptr<LLVMCont
     }
     getNextToken();
 
-    auto body = parseExpression(llvmContext);
+    auto body = parseExpression(llvmContext, ksDebugInfo);
     if (!body) {
         return nullptr;
     }
 
-    return std::make_unique<ast::ForExprAST>(idName, std::move(start), std::move(end), std::move(step), std::move(body), llvmContext);
+    return std::make_unique<ast::ForExprAST>(idName, std::move(start), std::move(end), std::move(step), std::move(body), llvmContext, ksDebugInfo);
 }
 
-static std::unique_ptr<ast::ExprAST> parseVarExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::ExprAST> parseVarExpr(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     getNextToken();
 
     std::vector<std::pair<std::string, std::unique_ptr<ast::ExprAST>>> varNames{};
@@ -192,7 +191,7 @@ static std::unique_ptr<ast::ExprAST> parseVarExpr(const std::shared_ptr<LLVMCont
         if (curTok == '=') {
             getNextToken();
 
-            init = parseExpression(llvmContext);
+            init = parseExpression(llvmContext, ksDebugInfo);
             if (!init) {
                 return nullptr;
             }
@@ -214,48 +213,49 @@ static std::unique_ptr<ast::ExprAST> parseVarExpr(const std::shared_ptr<LLVMCont
     }
     getNextToken();
 
-    auto body = parseExpression(llvmContext);
+    auto body = parseExpression(llvmContext, ksDebugInfo);
     if (!body) {
         return nullptr;
     }
-    return std::make_unique<ast::VarExprAST>(std::move(varNames), std::move(body), llvmContext);
+    return std::make_unique<ast::VarExprAST>(std::move(varNames), std::move(body), llvmContext, ksDebugInfo);
 }
 
-static std::unique_ptr<ast::ExprAST> parsePrimary(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::ExprAST> parsePrimary(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     switch (curTok) {
         default:
             return logError("unknown token when expecting an expression");
         case tokIdentifier:
-            return parseIdentifierExpr(llvmContext);
+            return parseIdentifierExpr(llvmContext, ksDebugInfo);
         case tokNumber:
-            return parseNumberExpr(llvmContext);
+            return parseNumberExpr(llvmContext, ksDebugInfo);
         case '(':
-            return parseParenExpr(llvmContext);
+            return parseParenExpr(llvmContext, ksDebugInfo);
         case tokIf:
-            return parseIfExpr(llvmContext);
+            return parseIfExpr(llvmContext, ksDebugInfo);
         case tokFor:
-            return parseForExpr(llvmContext);
+            return parseForExpr(llvmContext, ksDebugInfo);
         case tokVar:
-            return parseVarExpr(llvmContext);
+            return parseVarExpr(llvmContext, ksDebugInfo);
     }
 }
 
-static std::unique_ptr<ast::ExprAST> parseUnary(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::ExprAST> parseUnary(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     if (!isascii(curTok) || curTok == '(' || curTok == ',') {
-        return parsePrimary(llvmContext);
+        return parsePrimary(llvmContext, ksDebugInfo);
     }
 
     auto opC = curTok;
     getNextToken();
-    if (auto operand = parseUnary(llvmContext)) {
-        return std::make_unique<ast::UnaryExprAST>(opC, std::move(operand), llvmContext);
+    if (auto operand = parseUnary(llvmContext, ksDebugInfo)) {
+        return std::make_unique<ast::UnaryExprAST>(opC, std::move(operand), llvmContext, ksDebugInfo);
     }
     return nullptr;
 }
 
 static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
                                                    std::unique_ptr<ast::ExprAST> lhs,
-                                                   const std::shared_ptr<LLVMContext> &llvmContext) {
+                                                   const std::shared_ptr<LLVMContext> &llvmContext,
+                                                   const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     while (true) {
         auto tokPrec = getTokPrecedence(llvmContext);
 
@@ -266,32 +266,32 @@ static std::unique_ptr<ast::ExprAST> parseBinOpRHS(int exprPrec,
         SourceLocation binLoc = curLoc;
         getNextToken();
 
-        auto rhs = parseUnary(llvmContext);
+        auto rhs = parseUnary(llvmContext, ksDebugInfo);
         if (!rhs) {
             return nullptr;
         }
 
         auto nextPrec = getTokPrecedence(llvmContext);
         if (tokPrec < nextPrec) {
-            rhs = parseBinOpRHS(tokPrec+1, std::move(rhs), llvmContext);
+            rhs = parseBinOpRHS(tokPrec+1, std::move(rhs), llvmContext, ksDebugInfo);
             if (!rhs) {
                 return nullptr;
             }
         }
 
-        lhs = std::make_unique<ast::BinaryExprAST>(binLoc, binOp, std::move(lhs), std::move(rhs), llvmContext);
+        lhs = std::make_unique<ast::BinaryExprAST>(binLoc, binOp, std::move(lhs), std::move(rhs), llvmContext, ksDebugInfo);
     }
 }
 
-static std::unique_ptr<ast::ExprAST> parseExpression(const std::shared_ptr<LLVMContext> &llvmContext) {
-    auto lhs = parseUnary(llvmContext);
+static std::unique_ptr<ast::ExprAST> parseExpression(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
+    auto lhs = parseUnary(llvmContext, ksDebugInfo);
     if (!lhs) {
         return nullptr;
     }
-    return parseBinOpRHS(0, std::move(lhs), llvmContext);
+    return parseBinOpRHS(0, std::move(lhs), llvmContext, ksDebugInfo);
 }
 
-static std::unique_ptr<ast::PrototypeAST> parsePrototype(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::PrototypeAST> parsePrototype(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     using namespace std::string_literals;
     std::string fnName;
 
@@ -356,36 +356,36 @@ static std::unique_ptr<ast::PrototypeAST> parsePrototype(const std::shared_ptr<L
     return std::make_unique<ast::PrototypeAST>(fnLoc, fnName, std::move(argNames), llvmContext, kind != 0, binaryPrecedence);
 }
 
-static std::unique_ptr<ast::FunctionAST> parseDefinition(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::FunctionAST> parseDefinition(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     getNextToken();
-    auto proto = parsePrototype(llvmContext);
+    auto proto = parsePrototype(llvmContext, ksDebugInfo);
     if (proto == nullptr) {
         return nullptr;
     }
 
-    if (auto e = parseExpression(llvmContext)) {
-        return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e), llvmContext);
+    if (auto e = parseExpression(llvmContext, ksDebugInfo)) {
+        return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e), llvmContext, ksDebugInfo);
     }
     return nullptr;
 }
 
-static std::unique_ptr<ast::FunctionAST> parseTopLevelExpr(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::FunctionAST> parseTopLevelExpr(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     SourceLocation fnLoc = curLoc;
-    if (auto e = parseExpression(llvmContext)) {
+    if (auto e = parseExpression(llvmContext, ksDebugInfo)) {
         auto proto = std::make_unique<ast::PrototypeAST>(fnLoc, "__anon_expr",
                                                          std::vector<std::string>{}, llvmContext);
-        return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e), llvmContext);
+        return std::make_unique<ast::FunctionAST>(std::move(proto), std::move(e), llvmContext, ksDebugInfo);
     }
     return nullptr;
 }
 
-static std::unique_ptr<ast::PrototypeAST> parseExtern(const std::shared_ptr<LLVMContext> &llvmContext) {
+static std::unique_ptr<ast::PrototypeAST> parseExtern(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     getNextToken();
-    return parsePrototype(llvmContext);
+    return parsePrototype(llvmContext, ksDebugInfo);
 }
 
-static void handleDefinition(const std::shared_ptr<LLVMContext> &llvmContext) {
-    if (auto fnAst = parseDefinition(llvmContext)) {
+static void handleDefinition(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
+    if (auto fnAst = parseDefinition(llvmContext, ksDebugInfo)) {
         if (auto *fnIR = fnAst->codegen()) {
 /*            std::cout << "Read function definition:" << std::endl;
             fnIR->print(llvm::errs());
@@ -397,8 +397,8 @@ static void handleDefinition(const std::shared_ptr<LLVMContext> &llvmContext) {
     }
 }
 
-static void handleExtern(const std::shared_ptr<LLVMContext> &llvmContext) {
-    if (auto protoAst = parseExtern(llvmContext)) {
+static void handleExtern(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
+    if (auto protoAst = parseExtern(llvmContext, ksDebugInfo)) {
         if (auto *fnIR = protoAst->codegen()) {
 /*            std::cout << "Read extern: " << std::endl;
             fnIR->print(llvm::errs());
@@ -410,8 +410,8 @@ static void handleExtern(const std::shared_ptr<LLVMContext> &llvmContext) {
     }
 }
 
-static void handleTopLevelExpression(const std::shared_ptr<LLVMContext> &llvmContext) {
-    if (auto fnAst = parseTopLevelExpr(llvmContext)) {
+static void handleTopLevelExpression(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
+    if (auto fnAst = parseTopLevelExpr(llvmContext, ksDebugInfo)) {
         fnAst->codegen();
 /*       if (auto *fnIR = fnAst->codegen()) {
                    std::cout << "Read top-level expression:" << std::endl;
@@ -427,7 +427,7 @@ static void handleTopLevelExpression(const std::shared_ptr<LLVMContext> &llvmCon
     }
 }
 
-static void mainLoop(const std::shared_ptr<LLVMContext> &llvmContext) {
+static void mainLoop(const std::shared_ptr<LLVMContext> &llvmContext, const std::shared_ptr<ast::DebugInfo> &ksDebugInfo) {
     while (true) {
         std::cout << "ready> ";
         switch (curTok) {
@@ -437,13 +437,13 @@ static void mainLoop(const std::shared_ptr<LLVMContext> &llvmContext) {
                 getNextToken();
                 break;
             case tokDef:
-                handleDefinition(llvmContext);
+                handleDefinition(llvmContext, ksDebugInfo);
                 break;
             case tokExtern:
-                handleExtern(llvmContext);
+                handleExtern(llvmContext, ksDebugInfo);
                 break;
             default:
-                handleTopLevelExpression(llvmContext);
+                handleTopLevelExpression(llvmContext, ksDebugInfo);
                 break;
         }
     }

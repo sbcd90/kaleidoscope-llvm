@@ -4,14 +4,29 @@
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Function.h"
 #include "LLVM.h"
-#include "Debugger.h"
+
+struct SourceLocation {
+    int line;
+    int col;
+};
+
+static SourceLocation curLoc;
+static SourceLocation lexLoc{1, 0};
+
+static int advance() {
+    auto lastChar = getchar();
+
+    if (lastChar == '\n' || lastChar == '\r') {
+        ++lexLoc.line;
+        lexLoc.col = 0;
+    } else {
+        ++lexLoc.col;
+    }
+    return lastChar;
+}
 
 namespace ast {
     static std::map<std::string, llvm::AllocaInst*> namedValues;
-
-    llvm::raw_ostream& indent(llvm::raw_ostream &o, int size) {
-        return o << std::string(size, ' ');
-    }
 
     class ExprAST {
         SourceLocation loc;
@@ -30,11 +45,25 @@ namespace ast {
         }
     };
 
+    struct DebugInfo {
+        llvm::DICompileUnit *theCU;
+        llvm::DIType *dblTy;
+        std::vector<llvm::DIScope*> lexicalBlocks;
+        std::shared_ptr<LLVMContext> llvmContext;
+
+        DebugInfo(std::shared_ptr<LLVMContext> llvmContext): lexicalBlocks(std::vector<llvm::DIScope*>{}), llvmContext(std::move(llvmContext)) {}
+
+        void emitLocation(ast::ExprAST *ast);
+        llvm::DIType *getDoubleTy();
+    };
+
     class  NumberExprAST: public ExprAST {
         double val;
         std::shared_ptr<LLVMContext> llvmContext;
+        std::shared_ptr<DebugInfo> ksDebugInfo;
     public:
-        NumberExprAST(double val, std::shared_ptr<LLVMContext> llvmContext): val(val), llvmContext(std::move(llvmContext)) {}
+        NumberExprAST(double val, std::shared_ptr<LLVMContext> llvmContext, std::shared_ptr<DebugInfo> ksDebugInfo):
+        val(val), llvmContext(std::move(llvmContext)), ksDebugInfo(std::move(ksDebugInfo)) {}
 
         llvm::Value* codegen() override;
 
@@ -46,8 +75,10 @@ namespace ast {
     class VariableExprAST: public ExprAST {
         std::string name;
         std::shared_ptr<LLVMContext> llvmContext;
+        std::shared_ptr<DebugInfo> ksDebugInfo;
     public:
-        VariableExprAST(SourceLocation loc, std::string name, std::shared_ptr<LLVMContext> llvmContext): ast::ExprAST(loc), name(std::move(name)), llvmContext(std::move(llvmContext)) {}
+        VariableExprAST(SourceLocation loc, std::string name, std::shared_ptr<LLVMContext> llvmContext, std::shared_ptr<DebugInfo> ksDebugInfo):
+        ast::ExprAST(loc), name(std::move(name)), llvmContext(std::move(llvmContext)), ksDebugInfo(std::move(ksDebugInfo)) {}
 
         llvm::Value* codegen() override;
 
@@ -64,9 +95,10 @@ namespace ast {
         char op;
         std::unique_ptr<ExprAST> operand;
         std::shared_ptr<LLVMContext> llvmContext;
+        std::shared_ptr<DebugInfo> ksDebugInfo;
     public:
-        UnaryExprAST(char op, std::unique_ptr<ExprAST> operand, std::shared_ptr<LLVMContext> llvmContext):
-            op(op), operand(std::move(operand)), llvmContext(std::move(llvmContext)) {}
+        UnaryExprAST(char op, std::unique_ptr<ExprAST> operand, std::shared_ptr<LLVMContext> llvmContext, std::shared_ptr<DebugInfo> ksDebugInfo):
+            op(op), operand(std::move(operand)), llvmContext(std::move(llvmContext)), ksDebugInfo(std::move(ksDebugInfo)) {}
 
         llvm::Value* codegen() override;
 
@@ -82,16 +114,17 @@ namespace ast {
         std::unique_ptr<ExprAST> lhs;
         std::unique_ptr<ExprAST> rhs;
         std::shared_ptr<LLVMContext> llvmContext;
+        std::shared_ptr<DebugInfo> ksDebugInfo;
     public:
-        BinaryExprAST(SourceLocation loc, char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs, std::shared_ptr<LLVMContext> llvmContext):
-            ast::ExprAST(loc), op(op), lhs(std::move(lhs)), rhs(std::move(rhs)), llvmContext(std::move(llvmContext)) {}
+        BinaryExprAST(SourceLocation loc, char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs, std::shared_ptr<LLVMContext> llvmContext, std::shared_ptr<DebugInfo> ksDebugInfo):
+            ast::ExprAST(loc), op(op), lhs(std::move(lhs)), rhs(std::move(rhs)), llvmContext(std::move(llvmContext)), ksDebugInfo(std::move(ksDebugInfo)) {}
 
         llvm::Value* codegen() override;
 
         llvm::raw_ostream& dump(llvm::raw_ostream &out, int ind) override {
             ast::ExprAST::dump(out << "binary" << op, ind);
-            lhs->dump(indent(out, ind) << "LHS:", ind + 1);
-            rhs->dump(indent(out, ind) << "RHS:", ind + 1);
+            lhs->dump(llvmContext->indent(out, ind) << "LHS:", ind + 1);
+            rhs->dump(llvmContext->indent(out, ind) << "RHS:", ind + 1);
             return out;
         }
     };
@@ -100,16 +133,17 @@ namespace ast {
         std::string callee;
         std::vector<std::unique_ptr<ExprAST>> args;
         std::shared_ptr<LLVMContext> llvmContext;
+        std::shared_ptr<DebugInfo> ksDebugInfo;
     public:
-        CallexprAST(SourceLocation loc, std::string callee, std::vector<std::unique_ptr<ExprAST>> args, std::shared_ptr<LLVMContext> llvmContext):
-            ast::ExprAST(loc), callee(std::move(callee)), args(std::move(args)), llvmContext(std::move(llvmContext)) {}
+        CallexprAST(SourceLocation loc, std::string callee, std::vector<std::unique_ptr<ExprAST>> args, std::shared_ptr<LLVMContext> llvmContext, std::shared_ptr<DebugInfo> ksDebugInfo):
+            ast::ExprAST(loc), callee(std::move(callee)), args(std::move(args)), llvmContext(std::move(llvmContext)), ksDebugInfo(std::move(ksDebugInfo)) {}
 
         llvm::Value* codegen() override;
 
         llvm::raw_ostream& dump(llvm::raw_ostream &out, int ind) override {
             ast::ExprAST::dump(out << "call" << callee, ind);
             for (const auto &arg: args) {
-                arg->dump(indent(out, ind + 1), ind + 1);
+                arg->dump(llvmContext->indent(out, ind + 1), ind + 1);
             }
             return out;
         }
@@ -118,17 +152,18 @@ namespace ast {
     class IfExprAST: public ExprAST {
         std::unique_ptr<ExprAST> cond, then, else_;
         std::shared_ptr<LLVMContext> llvmContext;
+        std::shared_ptr<DebugInfo> ksDebugInfo;
     public:
-        IfExprAST(SourceLocation loc, std::unique_ptr<ExprAST> cond, std::unique_ptr<ExprAST> then, std::unique_ptr<ExprAST> else_, std::shared_ptr<LLVMContext> llvmContext):
-        ast::ExprAST(loc), cond(std::move(cond)), then(std::move(then)), else_(std::move(else_)), llvmContext(std::move(llvmContext)) {}
+        IfExprAST(SourceLocation loc, std::unique_ptr<ExprAST> cond, std::unique_ptr<ExprAST> then, std::unique_ptr<ExprAST> else_, std::shared_ptr<LLVMContext> llvmContext, std::shared_ptr<DebugInfo> ksDebugInfo):
+        ast::ExprAST(loc), cond(std::move(cond)), then(std::move(then)), else_(std::move(else_)), llvmContext(std::move(llvmContext)), ksDebugInfo(std::move(ksDebugInfo)) {}
 
         llvm::Value* codegen() override;
 
         llvm::raw_ostream& dump(llvm::raw_ostream &out, int ind) override {
             ast::ExprAST::dump(out << "if", ind);
-            cond->dump(indent(out, ind) << "Cond:", ind + 1);
-            then->dump(indent(out, ind) << "Then:", ind + 1);
-            else_->dump(indent(out, ind) << "Else:", ind + 1);
+            cond->dump(llvmContext->indent(out, ind) << "Cond:", ind + 1);
+            then->dump(llvmContext->indent(out, ind) << "Then:", ind + 1);
+            else_->dump(llvmContext->indent(out, ind) << "Else:", ind + 1);
             return out;
         }
     };
@@ -137,20 +172,21 @@ namespace ast {
         std::string varName;
         std::unique_ptr<ExprAST> start, end, step, body;
         std::shared_ptr<LLVMContext> llvmContext;
+        std::shared_ptr<DebugInfo> ksDebugInfo;
     public:
         ForExprAST(std::string varName, std::unique_ptr<ExprAST> start,
                    std::unique_ptr<ExprAST> end, std::unique_ptr<ExprAST> step,
-                   std::unique_ptr<ExprAST> body, std::shared_ptr<LLVMContext> llvmContext): varName(std::move(varName)), start(std::move(start)),
-                   end(std::move(end)), step(std::move(step)), body(std::move(body)), llvmContext(std::move(llvmContext)) {}
+                   std::unique_ptr<ExprAST> body, std::shared_ptr<LLVMContext> llvmContext, std::shared_ptr<DebugInfo> ksDebugInfo): varName(std::move(varName)), start(std::move(start)),
+                   end(std::move(end)), step(std::move(step)), body(std::move(body)), llvmContext(std::move(llvmContext)), ksDebugInfo(std::move(ksDebugInfo)) {}
 
         llvm::Value* codegen() override;
 
         llvm::raw_ostream& dump(llvm::raw_ostream &out, int ind) override {
             ast::ExprAST::dump(out << "for", ind);
-            start->dump(indent(out, ind) << "Cond:", ind + 1);
-            end->dump(indent(out, ind) << "End:", ind + 1);
-            step->dump(indent(out, ind) << "Step:", ind + 1);
-            body->dump(indent(out, ind) << "Body:", ind + 1);
+            start->dump(llvmContext->indent(out, ind) << "Cond:", ind + 1);
+            end->dump(llvmContext->indent(out, ind) << "End:", ind + 1);
+            step->dump(llvmContext->indent(out, ind) << "Step:", ind + 1);
+            body->dump(llvmContext->indent(out, ind) << "Body:", ind + 1);
             return out;
         }
     };
@@ -224,16 +260,17 @@ namespace ast {
         std::unique_ptr<PrototypeAST> proto;
         std::unique_ptr<ExprAST> body;
         std::shared_ptr<LLVMContext> llvmContext;
+        std::shared_ptr<DebugInfo> ksDebugInfo;
     public:
-        FunctionAST(std::unique_ptr<PrototypeAST> proto, std::unique_ptr<ExprAST> body, std::shared_ptr<LLVMContext> llvmContext):
-            proto(std::move(proto)), body(std::move(body)), llvmContext(std::move(llvmContext)) {}
+        FunctionAST(std::unique_ptr<PrototypeAST> proto, std::unique_ptr<ExprAST> body, std::shared_ptr<LLVMContext> llvmContext, std::shared_ptr<DebugInfo> ksDebugInfo):
+            proto(std::move(proto)), body(std::move(body)), llvmContext(std::move(llvmContext)), ksDebugInfo(std::move(ksDebugInfo)) {}
 
         llvm::Function* codegen();
 
         llvm::raw_ostream& dump(llvm::raw_ostream &out, int ind) {
-            indent(out, ind) << "FunctionAST\n";
+            llvmContext->indent(out, ind) << "FunctionAST\n";
             ++ind;
-            indent(out, ind) << "Body:";
+            llvmContext->indent(out, ind) << "Body:";
             return body ? body->dump(out, ind): out << "null\n";
         }
     };
@@ -242,19 +279,20 @@ namespace ast {
         std::vector<std::pair<std::string, std::unique_ptr<ast::ExprAST>>> varNames;
         std::unique_ptr<ast::ExprAST> body;
         std::shared_ptr<LLVMContext> llvmContext;
+        std::shared_ptr<DebugInfo> ksDebugInfo;
     public:
         VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ast::ExprAST>>> varNames,
-                   std::unique_ptr<ast::ExprAST> body, std::shared_ptr<LLVMContext> llvmContext):
-                   varNames(std::move(varNames)), body(std::move(body)), llvmContext(std::move(llvmContext)) {}
+                   std::unique_ptr<ast::ExprAST> body, std::shared_ptr<LLVMContext> llvmContext, std::shared_ptr<DebugInfo> ksDebugInfo):
+                   varNames(std::move(varNames)), body(std::move(body)), llvmContext(std::move(llvmContext)), ksDebugInfo(std::move(ksDebugInfo)) {}
 
         llvm::Value* codegen() override;
 
         llvm::raw_ostream &dump(llvm::raw_ostream &out, int ind) override {
             ast::ExprAST::dump(out << "var", ind);
             for (const auto &namedVar: varNames) {
-                namedVar.second->dump(indent(out, ind) << namedVar.first << ':', ind + 1);
+                namedVar.second->dump(llvmContext->indent(out, ind) << namedVar.first << ':', ind + 1);
             }
-            body->dump(indent(out, ind) << "Body:", ind + 1);
+            body->dump(llvmContext->indent(out, ind) << "Body:", ind + 1);
             return out;
         }
     };
